@@ -32,7 +32,7 @@ FECHA_FINAL = date.today()
 
 FECHA_INICIAL = (
     FECHA_FINAL -
-    timedelta(days=7)
+    timedelta(days=8)
 )
 
 
