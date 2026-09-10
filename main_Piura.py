@@ -32,7 +32,7 @@ FECHA_FINAL = date.today()
 
 FECHA_INICIAL = (
     FECHA_FINAL -
-    timedelta(days=8)
+    timedelta(days=7)
 )
 
 
@@ -560,7 +560,7 @@ def main():
     )
 
     ruta_salida = os.path.join(
-        "Data",
+        "Data/Piura",
         nombre_archivo
     )
 
