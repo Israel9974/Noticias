@@ -1,61 +1,144 @@
 import pandas as pd
-import re
 
-from scrapers.tiempo_scraper import Scraper2
+from datetime import datetime
 
+from .tiempo_scraper import Scraper2
 
 
 class ElTiempo:
-    """Scraper del diario El Tiempo."""
+    """
+    Scraper del portal El Tiempo.
+    """
 
     def __init__(self, main_url, news_number=30):
         self.main_url = main_url
         self.news_number = news_number
 
     def dframe(self):
-        """Obtiene las noticias de una página y las devuelve como DataFrame."""
+
+        print("Creando Scraper2...")
 
         news = Scraper2(
             self.main_url,
             self.news_number
         )
 
-        news_scraper = pd.DataFrame({
-            'DIARIO': 'El Tiempo',
-            'DIA': news.date_scraper(),
-            'TITULAR': news.header_scraper(),
-            'DESCRIPCIÓN': news.news_scraper(),
-            'LINKS': news.link_scraper()
-        })
+        print("Extrayendo fechas...")
+        fechas = news.date_scraper()
 
-        # Limpiar descripción
-        news_scraper['DESCRIPCIÓN'] = (
-            news_scraper['DESCRIPCIÓN']
-            .replace(re.compile(r"&[a-zA-Z]+?;"), " ")
+        print("Extrayendo titulares...")
+        titulares = news.header_scraper()
+
+        print("Extrayendo links...")
+        links = news.link_scraper()
+
+        print("Extrayendo descripciones...")
+        descripciones = news.news_scraper()
+
+        # --------------------------------------------------
+        # Determinar cantidad de noticias
+        # --------------------------------------------------
+
+        cantidad = min(
+            len(fechas),
+            len(titulares),
+            len(links),
+            len(descripciones)
         )
 
-        # Convertir meses del español al inglés
+        print(f"Noticias completas: {cantidad}")
+
+        # --------------------------------------------------
+        # Crear DataFrame
+        # --------------------------------------------------
+
+        news_scraper = pd.DataFrame({
+            "DIARIO": ["El Tiempo"] * cantidad,
+            "DIA": fechas[:cantidad],
+            "TITULAR": titulares[:cantidad],
+            "DESCRIPCIÓN": descripciones[:cantidad],
+            "LINKS": links[:cantidad]
+        })
+
+        print("DataFrame creado.")
+        print(f"Filas: {len(news_scraper)}")
+
+        # --------------------------------------------------
+        # Limpiar descripción
+        # --------------------------------------------------
+
+        descripciones_limpias = (
+            news_scraper["DESCRIPCIÓN"]
+            .fillna("")
+            .astype(str)
+            .str.replace(
+                r"&[a-zA-Z]+?;",
+                " ",
+                regex=True
+            )
+            .str.strip()
+        )
+
+        news_scraper.loc[:, "DESCRIPCIÓN"] = (
+            descripciones_limpias
+        )
+
+        print("Descripción limpiada.")
+
+        # --------------------------------------------------
+        # Limpiar y convertir fechas
+        # --------------------------------------------------
+
         meses = {
-            'Ene': 'Jan',
-            'Abr': 'Apr',
-            'Ago': 'Aug',
-            'Set': 'Sep',
-            'Dic': 'Dec'
+            "Ene": "Jan",
+            "Abr": "Apr",
+            "Ago": "Aug",
+            "Set": "Sep",
+            "Dic": "Dec"
         }
 
-        for mes_es, mes_en in meses.items():
-            news_scraper['DIA'] = (
-                news_scraper['DIA']
-                .replace(mes_es, mes_en, regex=True)
-            )
+        fechas_convertidas = []
 
-        news_scraper['DIA'] = news_scraper['DIA'].str.strip()
+        for fecha in news_scraper["DIA"].tolist():
 
-        # Convertir fecha
-        news_scraper['DIA'] = pd.to_datetime(
-            news_scraper['DIA'],
-            format='%b %d, %Y'
-        ).dt.date
+            if not fecha:
+                fechas_convertidas.append(None)
+                continue
+
+            fecha = str(fecha).strip()
+
+            # Cambiar meses españoles a ingleses
+            for mes_es, mes_en in meses.items():
+
+                fecha = fecha.replace(
+                    mes_es,
+                    mes_en
+                )
+
+            try:
+
+                fecha_obj = datetime.strptime(
+                    fecha,
+                    "%b %d, %Y"
+                ).date()
+
+                fechas_convertidas.append(
+                    fecha_obj
+                )
+
+            except ValueError:
+
+                print(
+                    f"No se pudo convertir fecha: {fecha}"
+                )
+
+                fechas_convertidas.append(None)
+
+        news_scraper.loc[:, "DIA"] = (
+            fechas_convertidas
+        )
+
+        print("Fechas convertidas.")
 
         return news_scraper
 
@@ -63,79 +146,102 @@ class ElTiempo:
 def scrape_el_tiempo(
     paginas_i,
     paginas_f,
-    region='piura',
+    region="piura",
     news_number=30
 ):
     """
-    Ejecuta el scraping de El Tiempo.
+    Ejecuta el scraper de El Tiempo.
 
-    Parameters
-    ----------
-    paginas_i : int
-        Primera página que se desea revisar.
+    paginas_i:
+        Página inicial.
 
-    paginas_f : int
-        Última página + 1.
+    paginas_f:
+        Página final + 1.
 
-    region : str
-        Región utilizada para la búsqueda.
+    region:
+        Región.
 
-    news_number : int
+    news_number:
         Número máximo de noticias por página.
     """
 
-    eltiempo = pd.DataFrame()
+    resultados = []
 
-    # Para Piura utilizamos la categoría local.
-    if region.lower() == 'piura':
+    for i in range(paginas_i, paginas_f):
 
-        for i in range(paginas_i, paginas_f):
+        if region.lower() == "piura":
 
-            url = f'https://eltiempo.pe/categoria/local/page/{i}'
-
-            scraper = ElTiempo(
-                main_url=url,
-                news_number=news_number
+            url = (
+                "https://eltiempo.pe/"
+                f"categoria/local/page/{i}"
             )
 
-            pagina = scraper.dframe()
+        else:
 
-            eltiempo = pd.concat(
-                [eltiempo, pagina],
-                ignore_index=True
+            url = (
+                "https://eltiempo.pe/"
+                f"page/{i}/?s={region}"
             )
 
-    # Para otras regiones utilizamos la búsqueda.
+        print()
+        print("=" * 60)
+        print(f"El Tiempo - página {i}")
+        print(f"URL: {url}")
+        print("=" * 60)
+
+        scraper = ElTiempo(
+            main_url=url,
+            news_number=news_number
+        )
+
+        pagina = scraper.dframe()
+
+        resultados.append(pagina)
+
+        print()
+        print(f"Página {i} terminada.")
+        print(f"Noticias obtenidas: {len(pagina)}")
+
+    # ------------------------------------------------------
+    # Unir páginas
+    # ------------------------------------------------------
+
+    if resultados:
+
+        eltiempo = pd.concat(
+            resultados,
+            ignore_index=True
+        )
+
     else:
 
-        for i in range(paginas_i, paginas_f):
+        eltiempo = pd.DataFrame(
+            columns=[
+                "DIARIO",
+                "DIA",
+                "TITULAR",
+                "DESCRIPCIÓN",
+                "LINKS"
+            ]
+        )
 
-            url = f'https://eltiempo.pe/page/{i}/?s={region}'
-
-            scraper = ElTiempo(
-                main_url=url,
-                news_number=news_number
-            )
-
-            pagina = scraper.dframe()
-
-            eltiempo = pd.concat(
-                [eltiempo, pagina],
-                ignore_index=True
-            )
-
-    print('¡El archivo de EL TIEMPO está listo!')
+    print()
+    print("=" * 60)
+    print("¡EL TIEMPO TERMINÓ!")
+    print(f"Total de noticias: {len(eltiempo)}")
+    print("=" * 60)
 
     return eltiempo
 
 
 if __name__ == "__main__":
 
-    # Prueba independiente del scraper
     resultado = scrape_el_tiempo(
         paginas_i=1,
         paginas_f=2,
-        region='piura'
+        region="piura",
+        news_number=30
     )
 
+    print()
     print(resultado)

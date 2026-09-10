@@ -1,124 +1,214 @@
 import pandas as pd
+
 from datetime import date, timedelta
-from pathlib import Path
-import winsound
 
 from scrapers.el_tiempo import scrape_el_tiempo
+from scrapers.andina import scrape_andina
 
 
 # ============================================================
 # CONFIGURACIÓN
 # ============================================================
 
-REGION = 'piura'
+REGION = "piura"
 
-# Fecha final = hoy
-END_DATE = date.today()
+NEWS_NUMBER_EL_TIEMPO = 30
+NEWS_NUMBER_ANDINA = 5
 
-# Fecha inicial = hace una semana
-START_DATE = END_DATE - timedelta(weeks=1)
-
-# Páginas a revisar
 PAGINAS_I = 1
 PAGINAS_F = 2
 
-# Número de noticias por página
-NEWS_NUMBER = 30
 
-# Ruta de salida
-RUTA_DATA = Path(
-    r'E:\Users\2957\OneDrive - BCRP\1. Israel\7.Optimizaciones\1. Web Scrapping\1. ScraperNewsPaper\4.Data'
-)
+# ============================================================
+# FECHAS
+# ============================================================
+
+FECHA_FINAL = date.today()
+FECHA_INICIAL = FECHA_FINAL - timedelta(days=7)
 
 
 # ============================================================
-# MAIN
+# FUNCIÓN PRINCIPAL
 # ============================================================
 
 def main():
 
-    print('=' * 60)
-    print('SCRAPER DE NOTICIAS - PIURA')
-    print('=' * 60)
+    print("=" * 60)
+    print("SCRAPER DE NOTICIAS - PIURA")
+    print("=" * 60)
 
-    print(f'Región: {REGION}')
-    print(f'Fecha inicial: {START_DATE}')
-    print(f'Fecha final: {END_DATE}')
-    print(f'Página inicial: {PAGINAS_I}')
-    print(f'Página final: {PAGINAS_F - 1}')
+    print(f"Región: {REGION}")
+    print(f"Fecha inicial: {FECHA_INICIAL}")
+    print(f"Fecha final: {FECHA_FINAL}")
     print()
+
 
     # ========================================================
     # EL TIEMPO
     # ========================================================
 
-    eltiempo = scrape_el_tiempo(
-        paginas_i=PAGINAS_I,
-        paginas_f=PAGINAS_F,
-        region=REGION,
-        news_number=NEWS_NUMBER
-    )
+    print("=" * 60)
+    print("INICIANDO EL TIEMPO")
+    print("=" * 60)
+
+    try:
+
+        eltiempo = scrape_el_tiempo(
+            paginas_i=PAGINAS_I,
+            paginas_f=PAGINAS_F,
+            region=REGION,
+            news_number=NEWS_NUMBER_EL_TIEMPO
+        )
+
+        print()
+        print(
+            f"El Tiempo terminado: "
+            f"{len(eltiempo)} noticias"
+        )
+
+    except Exception as error:
+
+        print()
+        print("ERROR EN EL TIEMPO:")
+        print(error)
+
+        eltiempo = pd.DataFrame(
+            columns=[
+                "DIARIO",
+                "DIA",
+                "TITULAR",
+                "DESCRIPCIÓN",
+                "LINKS"
+            ]
+        )
+
 
     # ========================================================
-    # UNIR RESULTADOS
+    # ANDINA
     # ========================================================
+
+    print()
+    print("=" * 60)
+    print("INICIANDO ANDINA")
+    print("=" * 60)
+
+    try:
+
+        andina = scrape_andina(
+            region=REGION,
+            news_number=NEWS_NUMBER_ANDINA
+        )
+
+        print()
+        print(
+            f"Andina terminado: "
+            f"{len(andina)} noticias"
+        )
+
+    except Exception as error:
+
+        print()
+        print("ERROR EN ANDINA:")
+        print(error)
+
+        andina = pd.DataFrame(
+            columns=[
+                "DIARIO",
+                "DIA",
+                "TITULAR",
+                "DESCRIPCIÓN",
+                "LINKS"
+            ]
+        )
+
+
+    # ========================================================
+    # UNIR
+    # ========================================================
+
+    print()
+    print("=" * 60)
+    print("UNIENDO NOTICIAS")
+    print("=" * 60)
 
     noticias = pd.concat(
-        [eltiempo],
+        [eltiempo, andina],
         ignore_index=True
     )
 
-    print()
-    print('=' * 60)
-    print('RESULTADOS')
-    print('=' * 60)
+    print(
+        f"Total de noticias: {len(noticias)}"
+    )
 
-    print(f'Total de noticias obtenidas: {len(noticias)}')
 
     # ========================================================
     # FILTRAR POR FECHA
     # ========================================================
 
+    print()
+    print("Filtrando noticias por fecha...")
+
     noticias = noticias[
-        (noticias['DIA'] >= START_DATE) &
-        (noticias['DIA'] <= END_DATE)
+        (noticias["DIA"] >= FECHA_INICIAL)
+        &
+        (noticias["DIA"] <= FECHA_FINAL)
     ].copy()
 
-    noticias.sort_values(
-        by='DIA',
-        ascending=False,
-        inplace=True
+    print(
+        f"Noticias después del filtro: "
+        f"{len(noticias)}"
     )
 
-    print(f'Noticias después del filtro: {len(noticias)}')
 
     # ========================================================
-    # CREAR CARPETA DE SALIDA
+    # ORDENAR
     # ========================================================
 
-    RUTA_DATA.mkdir(
-        parents=True,
-        exist_ok=True
+    print()
+    print("Ordenando noticias...")
+
+    noticias = noticias.sort_values(
+        by="DIA",
+        ascending=False
     )
+
+    print("Noticias ordenadas.")
+
 
     # ========================================================
     # NOMBRE DEL ARCHIVO
     # ========================================================
 
-    str_start_date = START_DATE.strftime('%Y%m%d')
-    str_end_date = END_DATE.strftime('%Y%m%d')
-
-    nombre_archivo = (
-        f'noticias_{REGION}_'
-        f'{str_start_date}_'
-        f'{str_end_date}.xlsx'
+    fecha_inicial_str = FECHA_INICIAL.strftime(
+        "%Y%m%d"
     )
 
-    ruta_salida = RUTA_DATA / nombre_archivo
+    fecha_final_str = FECHA_FINAL.strftime(
+        "%Y%m%d"
+    )
+
+    nombre_archivo = (
+        f"noticias_{REGION}_"
+        f"{fecha_inicial_str}_"
+        f"{fecha_final_str}.xlsx"
+    )
+
 
     # ========================================================
-    # EXPORTAR
+    # RUTA
     # ========================================================
+
+    ruta_salida = (
+        f"Data/{nombre_archivo}"
+    )
+
+
+    # ========================================================
+    # GUARDAR
+    # ========================================================
+
+    print()
+    print("Guardando archivo...")
 
     noticias.to_excel(
         ruta_salida,
@@ -126,24 +216,21 @@ def main():
     )
 
     print()
-    print('Archivo guardado:')
+    print("=" * 60)
+    print("ARCHIVO GUARDADO")
+    print("=" * 60)
+
     print(ruta_salida)
 
-    # ========================================================
-    # AVISO SONORO
-    # ========================================================
-
-    winsound.Beep(320, 1000)
-    winsound.Beep(320, 1000)
-    winsound.Beep(320, 1000)
-
     print()
-    print('Proceso terminado correctamente.')
+    print("=" * 60)
+    print("¡PROCESO TERMINADO CORRECTAMENTE!")
+    print("=" * 60)
 
 
 # ============================================================
 # EJECUTAR
 # ============================================================
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

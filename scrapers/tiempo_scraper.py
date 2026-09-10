@@ -1,104 +1,190 @@
 import requests
-from requests.exceptions import HTTPError
+from requests.exceptions import HTTPError, RequestException
 from bs4 import BeautifulSoup
-from datetime import datetime
 import unicodedata
 
 
 class Scraper2:
-    """ Local package que permite obtener las etiquetas(html),
-    titulares, descripciones y links de las noticias en el sitio """
+    """
+    Scraper base para El Tiempo.
 
-    def __init__(self, url, news_number):
+    Obtiene las noticias de una página y permite extraer:
+    - titulares
+    - descripciones
+    - enlaces
+    - fechas
+    """
+
+    def __init__(self, url, news_number=30):
         self.url = url
         self.news_number = news_number
 
+        # La página se descargará una sola vez
+        self.research = self.main_scraper()
+
     def main_scraper(self):
         """
-        Solicitud al servidor y obtención del html
-
-        Return:
-            Elementos html (etiquetas) de la clase que contiene la
-            caja con la información necesaria.
-
+        Descarga la página principal y obtiene los artículos.
         """
+
         try:
-            page = requests.get(self.url)
+            print(f"Descargando: {self.url}")
+
+            page = requests.get(
+                self.url,
+                timeout=30
+            )
+
+            print(f"Status HTTP: {page.status_code}")
+
             page.raise_for_status()
-        except HTTPError as http_err:
-            print(f'Un error ha ocurrido: {http_err}')
-        except Exception as err:
-            print(f'Un error ha ocurrido : {err}')
-        else:
-            datos = BeautifulSoup(page.text, 'lxml')
+
+            # Usamos el parser incluido con Python.
+            # No dependemos de lxml.
+            datos = BeautifulSoup(
+                page.text,
+                'html.parser'
+            )
+
             research = datos.find_all('article')
+
+            print(f"Artículos encontrados: {len(research)}")
+
             return research
+
+        except HTTPError as err:
+            print(f"Error HTTP: {err}")
+            return []
+
+        except RequestException as err:
+            print(f"Error de conexión: {err}")
+            return []
+
+        except Exception as err:
+            print(f"Error inesperado: {err}")
+            return []
+
+    def _articles(self):
+        """
+        Devuelve solamente el número de artículos solicitado.
+        """
+
+        return self.research[:self.news_number]
 
     def header_scraper(self):
         """
-        Extracción de los titulares.
-
-        Return:
-            Lista con titulares dependientes del
-            número solicitado.
-
+        Extrae los titulares.
         """
+
         titulares = []
-        try:
-            for dato in self.main_scraper()[:self.news_number]:
-                titulares.append(dato.h2.a.text)
-                titulares = [elem.strip() for elem in titulares]
-            return titulares
-        except TypeError:
-            pass
+
+        for dato in self._articles():
+
+            try:
+                titular = dato.h2.a.get_text(strip=True)
+                titulares.append(titular)
+
+            except AttributeError:
+                titulares.append("")
+
+        return titulares
 
     def news_scraper(self):
         """
-        Extracción de links de cada noticia.
-
-        Return:
-            Lista con links o urls de referencia.
+        Extrae el contenido de cada noticia.
         """
+
         cuerpo = []
-        try:
-            for dato in self.main_scraper()[:self.news_number]:
+
+        for dato in self._articles():
+
+            try:
                 enlace = dato.h2.a['href']
-                ws_news = requests.get(enlace)
-                news_datos = BeautifulSoup(ws_news.text, 'lxml')
-                news_text = news_datos.find('div', attrs={'class':'et_pb_module et_pb_post_content et_pb_post_content_0_tb_body'}).text
-                news = unicodedata.normalize("NFKD", news_text)
-                cuerpo.append(news)
-                cuerpo = [elem.strip() for elem in cuerpo]
-            return cuerpo
-        except TypeError:
-            pass
+
+                respuesta = requests.get(
+                    enlace,
+                    timeout=30
+                )
+
+                respuesta.raise_for_status()
+
+                news_datos = BeautifulSoup(
+                    respuesta.text,
+                    'html.parser'
+                )
+
+                contenido = news_datos.find(
+                    'div',
+                    attrs={
+                        'class': (
+                            'et_pb_module '
+                            'et_pb_post_content '
+                            'et_pb_post_content_0_tb_body'
+                        )
+                    }
+                )
+
+                if contenido is None:
+                    cuerpo.append("")
+                    continue
+
+                news_text = contenido.get_text(
+                    " ",
+                    strip=True
+                )
+
+                news = unicodedata.normalize(
+                    "NFKD",
+                    news_text
+                )
+
+                cuerpo.append(news.strip())
+
+            except (AttributeError, KeyError):
+                cuerpo.append("")
+
+            except RequestException as err:
+                print(
+                    f"Error obteniendo noticia: {err}"
+                )
+                cuerpo.append("")
+
+        return cuerpo
 
     def link_scraper(self):
         """
-        Extracción de links de cada noticia.
-
-        Return:
-            Lista con links o urls de referencia.
+        Extrae los enlaces de las noticias.
         """
+
         links = []
-        try:
-            for dato in self.main_scraper()[:self.news_number]:
-                links.append(dato.h2.a['href'])
-            return links
-        except TypeError:
-            pass
+
+        for dato in self._articles():
+
+            try:
+                links.append(
+                    dato.h2.a['href']
+                )
+
+            except (AttributeError, KeyError):
+                links.append("")
+
+        return links
 
     def date_scraper(self):
         """
-        Extracción del día de publicación de cada noticia.
-
-        Return:
-            Día de publicación de referencia.
+        Extrae la fecha de publicación.
         """
+
         dia = []
-        try:
-            for dato in self.main_scraper()[:self.news_number]:
-                dia.append(dato.p.text)
-            return dia
-        except TypeError:
-            pass
+
+        for dato in self._articles():
+
+            try:
+                dia.append(
+                    dato.p.get_text(strip=True)
+                )
+
+            except AttributeError:
+                dia.append("")
+
+        return dia
