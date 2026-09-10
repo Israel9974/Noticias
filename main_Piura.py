@@ -1,11 +1,12 @@
-port os
+import os
 import pandas as pd
 
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 from scrapers.el_tiempo import scrape_el_tiempo
 from scrapers.andina import scrape_andina
 from scrapers.el_comercio import scrape_el_comercio
+from scrapers.gestion import scrape_gestion
 
 
 # ============================================================
@@ -14,32 +15,13 @@ from scrapers.el_comercio import scrape_el_comercio
 
 REGION = "piura"
 
-
-# ------------------------------------------------------------
-# EL TIEMPO
-# ------------------------------------------------------------
-
 NEWS_NUMBER_EL_TIEMPO = 30
-
-PAGINAS_TIEMPO_I = 1
-PAGINAS_TIEMPO_F = 2
-
-
-# ------------------------------------------------------------
-# ANDINA
-# ------------------------------------------------------------
-
 NEWS_NUMBER_ANDINA = 5
-
-
-# ------------------------------------------------------------
-# EL COMERCIO
-# ------------------------------------------------------------
-
 NEWS_NUMBER_EL_COMERCIO = 20
+NEWS_NUMBER_GESTION = 20
 
-PAGINAS_COMERCIO_I = 1
-PAGINAS_COMERCIO_F = 2
+PAGINAS_I = 1
+PAGINAS_F = 2
 
 
 # ============================================================
@@ -49,7 +31,8 @@ PAGINAS_COMERCIO_F = 2
 FECHA_FINAL = date.today()
 
 FECHA_INICIAL = (
-    FECHA_FINAL - timedelta(days=7)
+    FECHA_FINAL -
+    timedelta(days=7)
 )
 
 
@@ -78,152 +61,155 @@ def dataframe_vacio():
 
 
 # ============================================================
-# NORMALIZAR FECHA
+# NORMALIZAR FECHAS
 # ============================================================
 
-def normalizar_fecha(fecha):
-    """
-    Convierte diferentes formatos de fecha
-    a datetime.date.
+def normalizar_fechas(df):
 
-    Formatos soportados:
+    if df.empty:
+        return df.copy()
 
-    - datetime.date
-    - datetime.datetime
-    - 2026-09-10
-    - 2026-09-10T12:30:00
-    - 10/09/2026
-    - Sep 10, 2026
-    """
+    df = df.copy()
 
-    if fecha is None:
-        return None
+    fechas = []
 
-    # --------------------------------------------------------
-    # Ya es date
-    # --------------------------------------------------------
+    for fecha in df["DIA"].tolist():
 
-    if isinstance(fecha, date):
+        if fecha is None:
 
-        return fecha
+            fechas.append(None)
+            continue
 
+        if pd.isna(fecha):
 
-    # --------------------------------------------------------
-    # Convertir a string
-    # --------------------------------------------------------
+            fechas.append(None)
+            continue
 
-    fecha = str(
-        fecha
-    ).strip()
+        fecha = str(fecha).strip()
 
+        if not fecha:
 
-    if not fecha:
-        return None
+            fechas.append(None)
+            continue
 
+        # --------------------------------------------------------
+        # Si viene con hora
+        # --------------------------------------------------------
 
-    # --------------------------------------------------------
-    # Formato ISO
-    #
-    # 2026-09-10T12:30:00
-    # --------------------------------------------------------
+        fecha = fecha.split("T")[0]
 
-    if "T" in fecha:
-
-        fecha = fecha.split(
-            "T"
-        )[0]
-
-
-    # --------------------------------------------------------
-    # Intentar formatos conocidos
-    # --------------------------------------------------------
-
-    formatos = [
-        "%Y-%m-%d",
-        "%d/%m/%Y",
-        "%b %d, %Y",
-        "%B %d, %Y"
-    ]
-
-
-    for formato in formatos:
+        # --------------------------------------------------------
+        # Si viene como datetime
+        # --------------------------------------------------------
 
         try:
 
-            return date.fromisoformat(
-                fecha
-            ) if formato == "%Y-%m-%d" else (
-                pd.Timestamp.strptime(
-                    fecha,
-                    formato
-                ).date()
-            )
+            fecha_obj = datetime.strptime(
+                fecha,
+                "%Y-%m-%d"
+            ).date()
 
-        except Exception:
+            fechas.append(
+                fecha_obj
+            )
 
             continue
 
+        except ValueError:
 
-    # --------------------------------------------------------
-    # Si no se pudo convertir
-    # --------------------------------------------------------
+            pass
 
-    return None
+        # --------------------------------------------------------
+        # Formato dd/mm/yyyy
+        # --------------------------------------------------------
+
+        try:
+
+            fecha_obj = datetime.strptime(
+                fecha,
+                "%d/%m/%Y"
+            ).date()
+
+            fechas.append(
+                fecha_obj
+            )
+
+            continue
+
+        except ValueError:
+
+            pass
+
+        # --------------------------------------------------------
+        # No reconocida
+        # --------------------------------------------------------
+
+        print(
+            f"⚠ Fecha no reconocida: "
+            f"{fecha}"
+        )
+
+        fechas.append(None)
+
+    # IMPORTANTE:
+    # usar .loc para evitar chained assignment
+
+    df.loc[:, "DIA"] = fechas
+
+    return df
 
 
 # ============================================================
-# FUNCIÓN PRINCIPAL
+# MAIN
 # ============================================================
 
 def main():
 
-    print()
-    print("=" * 70)
-    print("SCRAPER DE NOTICIAS - PIURA")
-    print("=" * 70)
+    print("=" * 60)
+    print(
+        "SCRAPER DE NOTICIAS - PIURA"
+    )
+    print("=" * 60)
 
     print(
         f"Región: {REGION}"
     )
 
     print(
-        f"Fecha inicial: {FECHA_INICIAL}"
+        f"Fecha inicial: "
+        f"{FECHA_INICIAL}"
     )
 
     print(
-        f"Fecha final: {FECHA_FINAL}"
+        f"Fecha final: "
+        f"{FECHA_FINAL}"
     )
 
-    print("=" * 70)
-
+    print("=" * 60)
 
     # ========================================================
     # EL TIEMPO
     # ========================================================
 
     print()
-    print("=" * 70)
+    print("=" * 60)
     print("INICIANDO EL TIEMPO")
-    print("=" * 70)
-
+    print("=" * 60)
 
     try:
 
         eltiempo = scrape_el_tiempo(
-            paginas_i=PAGINAS_TIEMPO_I,
-            paginas_f=PAGINAS_TIEMPO_F,
+            paginas_i=PAGINAS_I,
+            paginas_f=PAGINAS_F,
             region=REGION,
             news_number=NEWS_NUMBER_EL_TIEMPO
         )
 
-
         print()
-
         print(
             f"El Tiempo terminado: "
             f"{len(eltiempo)} noticias"
         )
-
 
     except Exception as error:
 
@@ -236,16 +222,14 @@ def main():
 
         eltiempo = dataframe_vacio()
 
-
     # ========================================================
     # ANDINA
     # ========================================================
 
     print()
-    print("=" * 70)
+    print("=" * 60)
     print("INICIANDO ANDINA")
-    print("=" * 70)
-
+    print("=" * 60)
 
     try:
 
@@ -254,14 +238,11 @@ def main():
             news_number=NEWS_NUMBER_ANDINA
         )
 
-
         print()
-
         print(
             f"Andina terminado: "
             f"{len(andina)} noticias"
         )
-
 
     except Exception as error:
 
@@ -274,34 +255,29 @@ def main():
 
         andina = dataframe_vacio()
 
-
     # ========================================================
     # EL COMERCIO
     # ========================================================
 
     print()
-    print("=" * 70)
+    print("=" * 60)
     print("INICIANDO EL COMERCIO")
-    print("=" * 70)
-
+    print("=" * 60)
 
     try:
 
         elcomercio = scrape_el_comercio(
             region=REGION,
-            paginas_i=PAGINAS_COMERCIO_I,
-            paginas_f=PAGINAS_COMERCIO_F,
+            paginas_i=PAGINAS_I,
+            paginas_f=PAGINAS_F,
             news_number=NEWS_NUMBER_EL_COMERCIO
         )
 
-
         print()
-
         print(
             f"El Comercio terminado: "
             f"{len(elcomercio)} noticias"
         )
-
 
     except Exception as error:
 
@@ -314,70 +290,93 @@ def main():
 
         elcomercio = dataframe_vacio()
 
-
     # ========================================================
-    # RESUMEN DE SCRAPERS
+    # GESTIÓN
     # ========================================================
 
     print()
-    print("=" * 70)
+    print("=" * 60)
+    print("INICIANDO GESTIÓN")
+    print("=" * 60)
+
+    try:
+
+        gestion = scrape_gestion(
+            region=REGION,
+            paginas_i=PAGINAS_I,
+            paginas_f=PAGINAS_F,
+            news_number=NEWS_NUMBER_GESTION
+        )
+
+        print()
+        print(
+            f"Gestión terminado: "
+            f"{len(gestion)} noticias"
+        )
+
+    except Exception as error:
+
+        print()
+        print(
+            "ERROR EN GESTIÓN:"
+        )
+
+        print(error)
+
+        gestion = dataframe_vacio()
+
+    # ========================================================
+    # RESUMEN
+    # ========================================================
+
+    print()
+    print("=" * 60)
     print("RESUMEN DE SCRAPERS")
-    print("=" * 70)
+    print("=" * 60)
 
     print(
-        f"El Tiempo:    {len(eltiempo)}"
+        f"El Tiempo:    "
+        f"{len(eltiempo)}"
     )
 
     print(
-        f"Andina:       {len(andina)}"
+        f"Andina:       "
+        f"{len(andina)}"
     )
 
     print(
-        f"El Comercio:  {len(elcomercio)}"
+        f"El Comercio:  "
+        f"{len(elcomercio)}"
     )
 
+    print(
+        f"Gestión:      "
+        f"{len(gestion)}"
+    )
 
     # ========================================================
     # UNIR
     # ========================================================
 
     print()
-    print("=" * 70)
+    print("=" * 60)
     print("UNIENDO NOTICIAS")
-    print("=" * 70)
-
+    print("=" * 60)
 
     noticias = pd.concat(
         [
             eltiempo,
             andina,
-            elcomercio
+            elcomercio,
+            gestion
         ],
         ignore_index=True
     )
-
 
     print(
         f"Total de noticias antes "
         f"del filtro: {len(noticias)}"
     )
-
-
-    # ========================================================
-    # ASEGURAR COLUMNAS
-    # ========================================================
-
-    for columna in COLUMNAS:
-
-        if columna not in noticias.columns:
-
-            noticias[columna] = ""
-
-
-    noticias = noticias[
-        COLUMNAS
-    ]
-
 
     # ========================================================
     # NORMALIZAR FECHAS
@@ -388,45 +387,16 @@ def main():
         "Normalizando fechas..."
     )
 
-
-    # IMPORTANTE:
-    # No usamos pd.to_datetime().
-    #
-    # Convertimos cada fecha individualmente.
-    # Esto evita problemas con pandas/numpy.
-
-
-    noticias["DIA"] = [
-        normalizar_fecha(fecha)
-        for fecha in noticias["DIA"]
-    ]
-
+    noticias = normalizar_fechas(
+        noticias
+    )
 
     print(
         "Fechas normalizadas."
     )
 
-
     # ========================================================
-    # CONTAR FECHAS INVÁLIDAS
-    # ========================================================
-
-    fechas_invalidas = sum(
-        fecha is None
-        for fecha in noticias["DIA"]
-    )
-
-
-    if fechas_invalidas > 0:
-
-        print(
-            f"⚠ Fechas inválidas: "
-            f"{fechas_invalidas}"
-        )
-
-
-    # ========================================================
-    # FILTRAR POR FECHA
+    # FILTRAR FECHAS
     # ========================================================
 
     print()
@@ -434,22 +404,26 @@ def main():
         "Filtrando noticias por fecha..."
     )
 
-
     noticias = noticias[
-        noticias["DIA"].apply(
-            lambda fecha:
-                fecha is not None
-                and
-                FECHA_INICIAL <= fecha <= FECHA_FINAL
-        )
+        noticias["DIA"].notna()
     ].copy()
 
+    noticias = noticias[
+        (
+            noticias["DIA"]
+            >= FECHA_INICIAL
+        )
+        &
+        (
+            noticias["DIA"]
+            <= FECHA_FINAL
+        )
+    ].copy()
 
     print(
         f"Noticias después del filtro: "
         f"{len(noticias)}"
     )
-
 
     # ========================================================
     # ELIMINAR DUPLICADOS
@@ -460,33 +434,23 @@ def main():
         "Eliminando noticias duplicadas..."
     )
 
+    antes = len(noticias)
 
-    noticias_con_link = noticias[
-        noticias["LINKS"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        != ""
-    ].copy()
-
-
-    noticias_sin_link = noticias[
-        noticias["LINKS"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        == ""
-    ].copy()
-
-
-    noticias_con_link = (
-        noticias_con_link
-        .drop_duplicates(
-            subset=["LINKS"],
-            keep="first"
-        )
+    # Primero por LINK
+    noticias = noticias.drop_duplicates(
+        subset=["LINKS"],
+        keep="first"
     )
 
+    # Eliminar posibles duplicados
+    # sin link
+    noticias_con_link = noticias[
+        noticias["LINKS"].astype(str).str.strip() != ""
+    ]
+
+    noticias_sin_link = noticias[
+        noticias["LINKS"].astype(str).str.strip() == ""
+    ]
 
     noticias = pd.concat(
         [
@@ -496,12 +460,15 @@ def main():
         ignore_index=True
     )
 
+    despues = len(noticias)
 
     print(
-        f"Noticias después de eliminar "
-        f"duplicados: {len(noticias)}"
+        f"Noticias antes: {antes}"
     )
 
+    print(
+        f"Noticias después: {despues}"
+    )
 
     # ========================================================
     # ORDENAR
@@ -512,76 +479,54 @@ def main():
         "Ordenando noticias..."
     )
 
-
     noticias = noticias.sort_values(
         by="DIA",
-        ascending=False
+        ascending=False,
+        na_position="last"
     ).reset_index(
         drop=True
     )
-
 
     print(
         "Noticias ordenadas."
     )
 
-
     # ========================================================
-    # RESUMEN FINAL
+    # RESUMEN FINAL POR DIARIO
     # ========================================================
 
     print()
-    print("=" * 70)
+    print("=" * 60)
     print("RESUMEN FINAL")
-    print("=" * 70)
+    print("=" * 60)
 
+    resumen = (
+        noticias["DIARIO"]
+        .value_counts()
+    )
 
-    if noticias.empty:
+    for diario in [
+        "El Tiempo",
+        "Andina",
+        "El Comercio",
+        "Gestión"
+    ]:
+
+        cantidad = resumen.get(
+            diario,
+            0
+        )
 
         print(
-            "No se encontraron noticias "
-            "dentro del rango de fechas."
+            f"{diario}: "
+            f"{cantidad} noticias"
         )
-
-    else:
-
-        resumen = (
-            noticias["DIARIO"]
-            .value_counts()
-        )
-
-
-        for diario, cantidad in resumen.items():
-
-            print(
-                f"{diario}: "
-                f"{cantidad} noticias"
-            )
-
 
     print()
-
     print(
         f"TOTAL FINAL: "
         f"{len(noticias)} noticias"
     )
-
-
-    # ========================================================
-    # CREAR CARPETA DATA
-    # ========================================================
-
-    print()
-    print(
-        "Verificando carpeta Data..."
-    )
-
-
-    os.makedirs(
-        "Data",
-        exist_ok=True
-    )
-
 
     # ========================================================
     # NOMBRE DEL ARCHIVO
@@ -593,13 +538,11 @@ def main():
         )
     )
 
-
     fecha_final_str = (
         FECHA_FINAL.strftime(
             "%Y%m%d"
         )
     )
-
 
     nombre_archivo = (
         f"noticias_{REGION}_"
@@ -607,63 +550,47 @@ def main():
         f"{fecha_final_str}.xlsx"
     )
 
+    # ========================================================
+    # CARPETA
+    # ========================================================
+
+    os.makedirs(
+        "Data",
+        exist_ok=True
+    )
 
     ruta_salida = os.path.join(
         "Data",
         nombre_archivo
     )
 
-
     # ========================================================
     # GUARDAR
     # ========================================================
 
     print()
-    print("=" * 70)
+    print("=" * 60)
     print("GUARDANDO ARCHIVO")
-    print("=" * 70)
+    print("=" * 60)
 
-
-    try:
-
-        noticias.to_excel(
-            ruta_salida,
-            index=False
-        )
-
-
-        print()
-
-        print(
-            "✓ Archivo guardado correctamente:"
-        )
-
-        print(
-            ruta_salida
-        )
-
-
-    except Exception as error:
-
-        print()
-
-        print(
-            "ERROR GUARDANDO EXCEL:"
-        )
-
-        print(error)
-
-        return
-
-
-    # ========================================================
-    # FINAL
-    # ========================================================
+    noticias.to_excel(
+        ruta_salida,
+        index=False
+    )
 
     print()
-    print("=" * 70)
-    print("PROCESO TERMINADO CORRECTAMENTE")
-    print("=" * 70)
+    print(
+        "✓ Archivo guardado correctamente:"
+    )
+
+    print(ruta_salida)
+
+    print()
+    print("=" * 60)
+    print(
+        "PROCESO TERMINADO CORRECTAMENTE"
+    )
+    print("=" * 60)
 
     print(
         f"Archivo: {ruta_salida}"
@@ -673,8 +600,6 @@ def main():
         f"Noticias finales: "
         f"{len(noticias)}"
     )
-
-    print("=" * 70)
 
 
 # ============================================================
