@@ -1,5 +1,5 @@
 import requests
-from requests.exceptions import HTTPError
+from requests.exceptions import HTTPError, RequestException
 from bs4 import BeautifulSoup
 import json
 
@@ -7,13 +7,28 @@ import json
 class Scraper:
     """
     Scraper auxiliar para El Comercio.
+
+    Obtiene:
+    - titulares
+    - enlaces
+    - contenido
+    - fechas
     """
 
-    def __init__(self, url, news_number):
+    def __init__(self, url, news_number=20):
+
         self.url = url
         self.news_number = news_number
 
+        # La página principal se descarga solamente una vez
+        self.research = self.main_scraper()
+
+
     def main_scraper(self):
+        """
+        Descarga la página principal de El Comercio
+        y obtiene los bloques de noticias.
+        """
 
         print(f"Descargando: {self.url}")
 
@@ -33,24 +48,32 @@ class Scraper:
                 }
             )
 
-            page.raise_for_status()
-
             print(
                 f"Status HTTP: {page.status_code}"
             )
 
-        except HTTPError as http_err:
+            page.raise_for_status()
+
+        except HTTPError as error:
 
             print(
-                f"Error HTTP: {http_err}"
+                f"Error HTTP en El Comercio: {error}"
             )
 
             return []
 
-        except Exception as err:
+        except RequestException as error:
 
             print(
-                f"Error descargando El Comercio: {err}"
+                f"Error de conexión en El Comercio: {error}"
+            )
+
+            return []
+
+        except Exception as error:
+
+            print(
+                f"Error descargando El Comercio: {error}"
             )
 
             return []
@@ -66,19 +89,25 @@ class Scraper:
         )
 
         print(
-            f"Artículos encontrados: "
-            f"{len(research)}"
+            f"Artículos encontrados: {len(research)}"
         )
 
         return research
 
+
     def _get_articles(self):
+        """
+        Devuelve solamente la cantidad de artículos
+        solicitada.
+        """
 
-        articles = self.main_scraper()
+        return self.research[:self.news_number]
 
-        return articles[:self.news_number]
 
     def header_scraper(self):
+        """
+        Extrae los titulares.
+        """
 
         titulares = []
 
@@ -98,7 +127,11 @@ class Scraper:
 
         return titulares
 
+
     def link_scraper(self):
+        """
+        Extrae los enlaces.
+        """
 
         links = []
 
@@ -108,9 +141,16 @@ class Scraper:
 
                 href = dato.h2.a.get("href")
 
+                if not href:
+                    links.append("")
+                    continue
+
                 if href.startswith("http"):
+
                     enlace = href
+
                 else:
+
                     enlace = (
                         "https://elcomercio.pe"
                         + href
@@ -124,7 +164,14 @@ class Scraper:
 
         return links
 
+
     def _get_json_ld(self, url):
+        """
+        Obtiene información JSON-LD de una noticia.
+        """
+
+        if not url:
+            return
 
         try:
 
@@ -166,33 +213,48 @@ class Scraper:
                         strict=False
                     )
 
-                except json.JSONDecodeError:
+                except (
+                    json.JSONDecodeError,
+                    TypeError
+                ):
 
                     continue
 
-                # Caso:
-                # {"articleBody": "..."}
+                # ------------------------------------------
+                # JSON-LD como diccionario
+                # ------------------------------------------
+
                 if isinstance(data, dict):
 
+                    # Noticia directamente
                     if (
                         "articleBody" in data
                         or "datePublished" in data
+                        or "description" in data
                     ):
+
                         yield data
 
-                    # @graph
+                    # JSON-LD usando @graph
                     if "@graph" in data:
 
-                        for item in data["@graph"]:
+                        graph = data["@graph"]
 
-                            if isinstance(
-                                item,
-                                dict
-                            ):
-                                yield item
+                        if isinstance(graph, list):
 
-                # Caso:
-                # [{...}, {...}]
+                            for item in graph:
+
+                                if isinstance(
+                                    item,
+                                    dict
+                                ):
+
+                                    yield item
+
+                # ------------------------------------------
+                # JSON-LD como lista
+                # ------------------------------------------
+
                 elif isinstance(data, list):
 
                     for item in data:
@@ -201,19 +263,33 @@ class Scraper:
                             item,
                             dict
                         ):
+
                             yield item
 
-        except Exception as e:
+        except RequestException as error:
 
             print(
-                f"Error obteniendo JSON-LD: {e}"
+                f"Error obteniendo noticia "
+                f"desde El Comercio: {error}"
             )
 
+        except Exception as error:
+
+            print(
+                f"Error procesando JSON-LD: {error}"
+            )
+
+
     def news_scraper(self):
+        """
+        Extrae el contenido de cada noticia.
+        """
 
         cuerpo = []
 
-        for enlace in self.link_scraper():
+        links = self.link_scraper()
+
+        for enlace in links:
 
             if not enlace:
 
@@ -222,35 +298,59 @@ class Scraper:
 
             descripcion = ""
 
-            for data in self._get_json_ld(enlace):
+            try:
 
-                if data.get("articleBody"):
+                for data in self._get_json_ld(enlace):
 
-                    descripcion = data[
-                        "articleBody"
-                    ]
+                    # Preferimos articleBody
+                    if data.get("articleBody"):
 
-                    break
+                        descripcion = data[
+                            "articleBody"
+                        ]
 
-                if data.get("description"):
+                        break
 
-                    descripcion = data[
-                        "description"
-                    ]
+                    # Si no existe articleBody,
+                    # utilizamos description
+                    if data.get("description"):
 
-            cuerpo.append(
-                descripcion.strip()
-                if descripcion
-                else ""
-            )
+                        descripcion = data[
+                            "description"
+                        ]
+
+                if descripcion:
+
+                    descripcion = str(
+                        descripcion
+                    ).strip()
+
+                cuerpo.append(
+                    descripcion
+                )
+
+            except Exception as error:
+
+                print(
+                    f"Error extrayendo contenido: "
+                    f"{error}"
+                )
+
+                cuerpo.append("")
 
         return cuerpo
 
+
     def date_scraper(self):
+        """
+        Extrae la fecha de publicación.
+        """
 
         fechas = []
 
-        for enlace in self.link_scraper():
+        links = self.link_scraper()
+
+        for enlace in links:
 
             if not enlace:
 
@@ -259,24 +359,35 @@ class Scraper:
 
             fecha = ""
 
-            for data in self._get_json_ld(enlace):
+            try:
 
-                if data.get("datePublished"):
+                for data in self._get_json_ld(enlace):
 
-                    fecha = data[
-                        "datePublished"
-                    ]
+                    if data.get("datePublished"):
 
-                    break
+                        fecha = data[
+                            "datePublished"
+                        ]
 
-                if data.get("uploadDate"):
+                        break
 
-                    fecha = data[
-                        "uploadDate"
-                    ]
+                    if data.get("uploadDate"):
 
-                    break
+                        fecha = data[
+                            "uploadDate"
+                        ]
 
-            fechas.append(fecha)
+                        break
+
+                fechas.append(fecha)
+
+            except Exception as error:
+
+                print(
+                    f"Error extrayendo fecha: "
+                    f"{error}"
+                )
+
+                fechas.append("")
 
         return fechas
