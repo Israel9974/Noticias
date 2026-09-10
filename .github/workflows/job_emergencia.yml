@@ -2,6 +2,9 @@ name: Job Emergencia
 
 on:
   workflow_dispatch:
+  
+permissions:
+  contents: write
 
 jobs:
   ejecutar-noticias:
