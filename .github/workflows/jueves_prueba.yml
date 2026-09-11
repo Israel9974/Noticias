@@ -2,8 +2,10 @@ name: Prueba Jueves 21:30
 
 on:
   schedule:
-    - cron: '31 21 * * 4'
+    - cron: '35 21 * * 4'
       timezone: "America/Lima"
+
+  workflow_dispatch:
 
 permissions:
   contents: write
