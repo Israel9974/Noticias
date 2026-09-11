@@ -1,4 +1,4 @@
-name: Job Emergencia
+name: Job Manual
 
 on:
   workflow_dispatch:
