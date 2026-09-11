@@ -12,7 +12,6 @@ on:
 permissions:
   contents: read
 
-
 jobs:
 
   guardar-storage:
@@ -26,7 +25,6 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
 
     runs-on: ubuntu-latest
-
 
     steps:
 
@@ -57,31 +55,12 @@ jobs:
 
 
       # =====================================================
-      # 3. INSTALAR PYTHON Y DEPENDENCIAS
-      # =====================================================
-
-      - name: Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-
-      - name: Instalar pandas y pyarrow
-        run: |
-
-          python -m pip install --upgrade pip
-
-          pip install pandas pyarrow
-
-
-      # =====================================================
-      # 4. CLONAR REPOSITORIO STORAGE
+      # 3. CLONAR REPOSITORIO STORAGE
       # =====================================================
 
       - name: Descargar repositorio Storage
         env:
           STORAGE_TOKEN: ${{ secrets.STORAGE_TOKEN }}
-
         run: |
 
           echo "=========================================="
@@ -96,7 +75,7 @@ jobs:
 
 
       # =====================================================
-      # 5. CREAR ESTRUCTURA DE CARPETAS
+      # 4. CREAR ESTRUCTURA DE CARPETAS
       # =====================================================
 
       - name: Crear carpetas de Storage
@@ -116,7 +95,7 @@ jobs:
 
 
       # =====================================================
-      # 6. COPIAR EXCEL DE PIURA
+      # 5. COPIAR EXCEL DE PIURA
       # =====================================================
 
       - name: Copiar Excel de Piura
@@ -144,7 +123,7 @@ jobs:
 
 
       # =====================================================
-      # 7. COPIAR PARQUET DE PIURA
+      # 6. COPIAR PARQUET DE PIURA
       # =====================================================
 
       - name: Copiar Parquet de Piura
@@ -171,7 +150,7 @@ jobs:
 
 
       # =====================================================
-      # 8. COPIAR EXCEL DE LAMBAYEQUE
+      # 7. COPIAR EXCEL DE LAMBAYEQUE
       # =====================================================
 
       - name: Copiar Excel de Lambayeque
@@ -199,7 +178,7 @@ jobs:
 
 
       # =====================================================
-      # 9. COPIAR PARQUET DE LAMBAYEQUE
+      # 8. COPIAR PARQUET DE LAMBAYEQUE
       # =====================================================
 
       - name: Copiar Parquet de Lambayeque
@@ -226,265 +205,7 @@ jobs:
 
 
       # =====================================================
-      # 10. CREAR PARQUETS CONSOLIDADOS
-      # =====================================================
-
-      - name: Generar Parquet consolidados
-        run: |
-
-          echo "=========================================="
-          echo "GENERANDO PARQUETS CONSOLIDADOS"
-          echo "=========================================="
-
-          python <<'PY'
-
-          import os
-          import pandas as pd
-
-
-          # =================================================
-          # FUNCIÓN PARA CONSOLIDAR UNA REGIÓN
-          # =================================================
-
-          def consolidar_region(region):
-
-              carpeta = (
-                  f"storage_repo/noticias/"
-                  f"{region}/parquet"
-              )
-
-              archivo_salida = (
-                  f"noticias_{region}_consolidado.parquet"
-              )
-
-              ruta_salida = os.path.join(
-                  carpeta,
-                  archivo_salida
-              )
-
-
-              print()
-              print("=" * 60)
-              print(
-                  f"CONSOLIDANDO: "
-                  f"{region.upper()}"
-              )
-              print("=" * 60)
-
-
-              # =============================================
-              # VERIFICAR CARPETA
-              # =============================================
-
-              if not os.path.exists(carpeta):
-
-                  print(
-                      f"⚠ No existe: {carpeta}"
-                  )
-
-                  return
-
-
-              # =============================================
-              # BUSCAR PARQUETS
-              # =============================================
-
-              archivos = []
-
-              for nombre in os.listdir(carpeta):
-
-                  if not nombre.lower().endswith(
-                      ".parquet"
-                  ):
-                      continue
-
-                  # No incluir el consolidado
-                  if nombre == archivo_salida:
-                      continue
-
-                  archivos.append(nombre)
-
-
-              archivos.sort()
-
-
-              print(
-                  f"Parquets encontrados: "
-                  f"{len(archivos)}"
-              )
-
-
-              # =============================================
-              # SI NO HAY ARCHIVOS
-              # =============================================
-
-              if not archivos:
-
-                  print(
-                      "⚠ No hay Parquet para consolidar."
-                  )
-
-                  return
-
-
-              # =============================================
-              # LEER TODOS LOS PARQUETS
-              # =============================================
-
-              tablas = []
-
-              for nombre in archivos:
-
-                  ruta = os.path.join(
-                      carpeta,
-                      nombre
-                  )
-
-                  print(
-                      f"Leyendo: {nombre}"
-                  )
-
-                  try:
-
-                      df = pd.read_parquet(
-                          ruta
-                      )
-
-                      # =====================================
-                      # AGREGAR NOMBRE DEL ARCHIVO ORIGINAL
-                      # =====================================
-
-                      df["ARCHIVO_ORIGEN"] = nombre
-
-                      tablas.append(df)
-
-                      print(
-                          f"  ✓ {len(df)} filas"
-                      )
-
-                  except Exception as error:
-
-                      print(
-                          f"  ⚠ ERROR leyendo "
-                          f"{nombre}: {error}"
-                      )
-
-
-              # =============================================
-              # VERIFICAR DATOS
-              # =============================================
-
-              if not tablas:
-
-                  print(
-                      "⚠ No se pudo leer ningún Parquet."
-                  )
-
-                  return
-
-
-              # =============================================
-              # UNIR TODOS
-              # =============================================
-
-              consolidado = pd.concat(
-                  tablas,
-                  ignore_index=True
-              )
-
-
-              # =============================================
-              # ELIMINAR DUPLICADOS EXACTOS
-              # =============================================
-
-              antes = len(consolidado)
-
-              consolidado = consolidado.drop_duplicates(
-                  ignore_index=True
-              )
-
-              despues = len(consolidado)
-
-
-              if antes != despues:
-
-                  print(
-                      f"Duplicados eliminados: "
-                      f"{antes - despues}"
-                  )
-
-
-              # =============================================
-              # GUARDAR
-              # =============================================
-
-              consolidado.to_parquet(
-                  ruta_salida,
-                  index=False
-              )
-
-
-              print()
-              print(
-                  f"✓ Consolidado generado:"
-              )
-
-              print(
-                  f"  {ruta_salida}"
-              )
-
-              print(
-                  f"  Filas: {len(consolidado)}"
-              )
-
-              print(
-                  f"  Columnas: "
-                  f"{len(consolidado.columns)}"
-              )
-
-
-              print()
-              print(
-                  "Columnas:"
-              )
-
-              for columna in consolidado.columns:
-
-                  print(
-                      f"  - {columna}"
-                  )
-
-
-          # =================================================
-          # PIURA
-          # =================================================
-
-          consolidar_region(
-              "piura"
-          )
-
-
-          # =================================================
-          # LAMBAYEQUE
-          # =================================================
-
-          consolidar_region(
-              "lambayeque"
-          )
-
-
-          print()
-          print("=" * 60)
-          print(
-              "✓ CONSOLIDACIÓN TERMINADA"
-          )
-          print("=" * 60)
-
-          PY
-
-
-      # =====================================================
-      # 11. MOSTRAR ESTRUCTURA FINAL
+      # 9. MOSTRAR ESTRUCTURA FINAL
       # =====================================================
 
       - name: Revisar archivos en Storage
@@ -494,28 +215,25 @@ jobs:
           echo "ARCHIVOS EN STORAGE"
           echo "=========================================="
 
-          find storage_repo/noticias \
-            -type f \
-            -print
+          find storage_repo/noticias -type f -print
 
 
       # =====================================================
-      # 12. CONFIGURAR GIT
+      # 10. CONFIGURAR GIT
       # =====================================================
 
       - name: Configurar Git
         working-directory: storage_repo
         run: |
 
-          git config user.name \
-            "github-actions[bot]"
+          git config user.name "github-actions[bot]"
 
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
 
       # =====================================================
-      # 13. REVISAR CAMBIOS
+      # 11. REVISAR CAMBIOS
       # =====================================================
 
       - name: Revisar cambios
@@ -530,7 +248,7 @@ jobs:
 
 
       # =====================================================
-      # 14. GUARDAR CAMBIOS EN STORAGE
+      # 12. GUARDAR CAMBIOS EN STORAGE
       # =====================================================
 
       - name: Guardar archivos en Storage
