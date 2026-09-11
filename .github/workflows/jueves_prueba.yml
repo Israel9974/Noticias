@@ -2,7 +2,7 @@ name: Prueba Jueves 21:30
 
 on:
   schedule:
-    - cron: '27 21 * * 4'
+    - cron: '31 21 * * 4'
       timezone: "America/Lima"
 
 permissions:
