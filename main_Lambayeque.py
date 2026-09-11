@@ -436,6 +436,12 @@ def main():
         f"{fecha_final_str}.xlsx"
     )
 
+    nombre_archivo_parquet = (
+        f"noticias_{REGION}_"
+        f"{fecha_inicial_str}_"
+        f"{fecha_final_str}.parquet"
+    )
+
 
     # ========================================================
     # CARPETA DE SALIDA
@@ -451,11 +457,21 @@ def main():
         exist_ok=True
     )
 
+    os.makedirs(
+        "Data/Lambayeque/parquet",
+        exist_ok=True
+    )
+
+
     ruta_salida = os.path.join(
         carpeta_salida,
         nombre_archivo
     )
 
+    ruta_salida_parquet = os.path.join(
+        "Data/Lambayeque/parquet",
+        nombre_archivo_parquet
+    )
 
     # ========================================================
     # GUARDAR ARCHIVO
@@ -468,6 +484,12 @@ def main():
 
     noticias.to_excel(
         ruta_salida,
+        index=False
+    )
+
+    # Parquet
+    noticias.to_parquet(
+        ruta_salida_parquet,
         index=False
     )
 
