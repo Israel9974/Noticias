@@ -16,8 +16,6 @@ jobs:
 
   guardar-storage:
 
-    # Solo ejecutar automáticamente si "Prueba Viernes"
-    # terminó correctamente.
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
@@ -27,7 +25,7 @@ jobs:
     steps:
 
       # =====================================================
-      # 1. DESCARGAR EL REPOSITORIO PRINCIPAL
+      # 1. DESCARGAR REPOSITORIO PRINCIPAL
       # =====================================================
 
       - name: Descargar repositorio de noticias
@@ -35,21 +33,17 @@ jobs:
 
 
       # =====================================================
-      # 2. MOSTRAR LOS ARCHIVOS DISPONIBLES
+      # 2. MOSTRAR DATA
       # =====================================================
 
       - name: Revisar archivos generados
         run: |
 
           echo "=========================================="
-          echo "ARCHIVOS DISPONIBLES"
+          echo "ARCHIVOS EN DATA"
           echo "=========================================="
 
-          if [ -d "Data" ]; then
-            find Data -type f -print
-          else
-            echo "⚠ No existe la carpeta Data"
-          fi
+          find Data -type f -print
 
 
       # =====================================================
@@ -67,66 +61,115 @@ jobs:
 
 
       # =====================================================
-      # 4. CREAR CARPETAS DE DESTINO
+      # 4. CREAR ESTRUCTURA DE STORAGE
       # =====================================================
 
-      - name: Crear carpetas de Storage
+      - name: Crear carpetas
         run: |
 
-          mkdir -p storage/noticias/Piura
-          mkdir -p storage/noticias/Lambayeque
+          mkdir -p storage/noticias/piura/excel
+          mkdir -p storage/noticias/piura/parquet
+
+          mkdir -p storage/noticias/lambayeque/excel
+          mkdir -p storage/noticias/lambayeque/parquet
 
 
       # =====================================================
-      # 5. COPIAR PIURA
+      # 5. COPIAR EXCEL DE PIURA
       # =====================================================
 
-      - name: Copiar datos de Piura
+      - name: Copiar Excel de Piura
         run: |
 
-          if [ -d "Data/Piura" ]; then
+          echo "=========================================="
+          echo "EXCEL - PIURA"
+          echo "=========================================="
 
-            echo "=========================================="
-            echo "COPIANDO PIURA"
-            echo "=========================================="
+          find Data/Piura \
+            -maxdepth 1 \
+            -type f \
+            -name "*.xlsx" \
+            -exec cp {} storage/noticias/piura/excel/ \;
 
-            cp -r Data/Piura/* storage/noticias/Piura/ || true
+          echo "Archivos Excel de Piura:"
 
-            echo "✓ Datos de Piura copiados."
-
-          else
-
-            echo "⚠ No existe Data/Piura"
-
-          fi
+          find storage/noticias/piura/excel \
+            -type f \
+            -name "*.xlsx"
 
 
       # =====================================================
-      # 6. COPIAR LAMBAYEQUE
+      # 6. COPIAR PARQUET DE PIURA
       # =====================================================
 
-      - name: Copiar datos de Lambayeque
+      - name: Copiar Parquet de Piura
         run: |
 
-          if [ -d "Data/Lambayeque" ]; then
+          echo "=========================================="
+          echo "PARQUET - PIURA"
+          echo "=========================================="
 
-            echo "=========================================="
-            echo "COPIANDO LAMBAYEQUE"
-            echo "=========================================="
+          find Data/Piura \
+            -type f \
+            -name "*.parquet" \
+            -exec cp {} storage/noticias/piura/parquet/ \;
 
-            cp -r Data/Lambayeque/* storage/noticias/Lambayeque/ || true
+          echo "Archivos Parquet de Piura:"
 
-            echo "✓ Datos de Lambayeque copiados."
-
-          else
-
-            echo "⚠ No existe Data/Lambayeque"
-
-          fi
+          find storage/noticias/piura/parquet \
+            -type f \
+            -name "*.parquet"
 
 
       # =====================================================
-      # 7. CONFIGURAR GIT
+      # 7. COPIAR EXCEL DE LAMBAYEQUE
+      # =====================================================
+
+      - name: Copiar Excel de Lambayeque
+        run: |
+
+          echo "=========================================="
+          echo "EXCEL - LAMBAYEQUE"
+          echo "=========================================="
+
+          find Data/Lambayeque \
+            -maxdepth 1 \
+            -type f \
+            -name "*.xlsx" \
+            -exec cp {} storage/noticias/lambayeque/excel/ \;
+
+          echo "Archivos Excel de Lambayeque:"
+
+          find storage/noticias/lambayeque/excel \
+            -type f \
+            -name "*.xlsx"
+
+
+      # =====================================================
+      # 8. COPIAR PARQUET DE LAMBAYEQUE
+      # =====================================================
+
+      - name: Copiar Parquet de Lambayeque
+        run: |
+
+          echo "=========================================="
+          echo "PARQUET - LAMBAYEQUE"
+          echo "=========================================="
+
+          find Data/Lambayeque \
+            -type f \
+            -name "*.parquet" \
+            -exec cp {} storage/noticias/lambayeque/parquet/ \;
+
+          echo "Archivos Parquet de Lambayeque:"
+
+          find storage/noticias/lambayeque/parquet \
+            -type f \
+            -name "*.parquet"
+
+
+      # =====================================================
+      # 9. CONFIGURAR GIT
       # =====================================================
 
       - name: Configurar Git
@@ -140,7 +183,7 @@ jobs:
 
 
       # =====================================================
-      # 8. MOSTRAR CAMBIOS
+      # 10. MOSTRAR CAMBIOS
       # =====================================================
 
       - name: Revisar cambios
@@ -155,7 +198,7 @@ jobs:
 
 
       # =====================================================
-      # 9. GUARDAR CAMBIOS
+      # 11. GUARDAR CAMBIOS
       # =====================================================
 
       - name: Guardar archivos en Storage
@@ -167,15 +210,13 @@ jobs:
           if git diff --cached --quiet; then
 
             echo "=========================================="
-            echo "NO HAY ARCHIVOS NUEVOS"
+            echo "NO HAY CAMBIOS NUEVOS"
             echo "=========================================="
-
-            echo "Storage ya contiene los datos actuales."
 
           else
 
             echo "=========================================="
-            echo "GUARDANDO NUEVOS ARCHIVOS"
+            echo "GUARDANDO ARCHIVOS"
             echo "=========================================="
 
             git commit \
