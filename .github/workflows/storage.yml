@@ -136,6 +136,7 @@ jobs:
           if [ -d "Data/Piura" ]; then
 
             find Data/Piura \
+              -maxdepth 1 \
               -type f \
               -name "*.parquet" \
               -exec cp {} storage_repo/noticias/piura/parquet/ \;
@@ -191,6 +192,7 @@ jobs:
           if [ -d "Data/Lambayeque" ]; then
 
             find Data/Lambayeque \
+              -maxdepth 1 \
               -type f \
               -name "*.parquet" \
               -exec cp {} storage_repo/noticias/lambayeque/parquet/ \;
@@ -205,7 +207,89 @@ jobs:
 
 
       # =====================================================
-      # 9. MOSTRAR ESTRUCTURA FINAL
+      # 9. CREAR ÍNDICE DE PARQUET DE PIURA
+      # =====================================================
+
+      - name: Crear índice Parquet de Piura
+        run: |
+
+          echo "=========================================="
+          echo "ÍNDICE PARQUET - PIURA"
+          echo "=========================================="
+
+          cd storage_repo/noticias/piura/parquet
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          carpeta = Path(".")
+
+          archivos = sorted(
+              archivo.name
+              for archivo in carpeta.glob("*.parquet")
+          )
+
+          with open("indice.json", "w", encoding="utf-8") as archivo:
+              json.dump(
+                  archivos,
+                  archivo,
+                  ensure_ascii=False,
+                  indent=2
+              )
+
+          print(f"✓ Archivos Parquet encontrados: {len(archivos)}")
+
+          print("Contenido del índice:")
+
+          for archivo in archivos:
+              print(f"  - {archivo}")
+          PY
+
+
+      # =====================================================
+      # 10. CREAR ÍNDICE DE PARQUET DE LAMBAYEQUE
+      # =====================================================
+
+      - name: Crear índice Parquet de Lambayeque
+        run: |
+
+          echo "=========================================="
+          echo "ÍNDICE PARQUET - LAMBAYEQUE"
+          echo "=========================================="
+
+          cd storage_repo/noticias/lambayeque/parquet
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          carpeta = Path(".")
+
+          archivos = sorted(
+              archivo.name
+              for archivo in carpeta.glob("*.parquet")
+          )
+
+          with open("indice.json", "w", encoding="utf-8") as archivo:
+              json.dump(
+                  archivos,
+                  archivo,
+                  ensure_ascii=False,
+                  indent=2
+              )
+
+          print(f"✓ Archivos Parquet encontrados: {len(archivos)}")
+
+          print("Contenido del índice:")
+
+          for archivo in archivos:
+              print(f"  - {archivo}")
+          PY
+
+
+      # =====================================================
+      # 11. MOSTRAR ESTRUCTURA FINAL
       # =====================================================
 
       - name: Revisar archivos en Storage
@@ -219,7 +303,7 @@ jobs:
 
 
       # =====================================================
-      # 10. CONFIGURAR GIT
+      # 12. CONFIGURAR GIT
       # =====================================================
 
       - name: Configurar Git
@@ -233,7 +317,7 @@ jobs:
 
 
       # =====================================================
-      # 11. REVISAR CAMBIOS
+      # 13. REVISAR CAMBIOS
       # =====================================================
 
       - name: Revisar cambios
@@ -248,7 +332,7 @@ jobs:
 
 
       # =====================================================
-      # 12. GUARDAR CAMBIOS EN STORAGE
+      # 14. GUARDAR CAMBIOS EN STORAGE
       # =====================================================
 
       - name: Guardar archivos en Storage
