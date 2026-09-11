@@ -1,4 +1,3 @@
-# %%
 from wordcloud import WordCloud
 from nltk.corpus import stopwords
 from collections import Counter
@@ -10,17 +9,14 @@ import re
 nlp = spacy.load("es_core_news_sm")
 spanish_stopwords = set(stopwords.words('spanish'))
 
-# %%
 def tokenize_phrase(phrase):
     return [token.lemma_.lower() for token in nlp(phrase)
             if not token.is_punct and not token.is_stop and token.text.lower() not in spanish_stopwords]
 
-# %%
 # Cargar datos del Excel
 aux = pd.read_excel("./excel_files/43. REPORTE SEMANAL DE NOTICIAS LOCALES - 04_10_ABRIL.xlsx", sheet_name='Para el Word - sin del')
 texto_piura = aux['TITULAR'].dropna().tolist()  # Evita valores NaN
 
-# %%
 word_counter = Counter(token for frase in texto_piura for token in tokenize_phrase(frase) if not re.search(r'\d', token))
 
 # stopwords en el counter
@@ -36,10 +32,8 @@ plt.show()
 
 nube.to_file("nube.png")
 
-# %%
 word_counter
 
-# %%
 print(word_counter.keys())
 
 

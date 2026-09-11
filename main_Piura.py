@@ -550,18 +550,34 @@ def main():
         f"{fecha_final_str}.xlsx"
     )
 
-    # ========================================================
-    # CARPETA
-    # ========================================================
+    nombre_archivo_parquet = (
+        f"noticias_{REGION}_"
+        f"{fecha_inicial_str}_"
+        f"{fecha_final_str}.parquet"
+    )
+
+# ========================================================
+# CARPETAS
+# ========================================================
 
     os.makedirs(
-        "Data",
+        "Data/Piura",
+        exist_ok=True
+    )
+
+    os.makedirs(
+        "Data/Piura/parquet",
         exist_ok=True
     )
 
     ruta_salida = os.path.join(
         "Data/Piura",
         nombre_archivo
+    )
+
+    ruta_salida_parquet = os.path.join(
+        "Data/Piura/parquet",
+        nombre_archivo_parquet
     )
 
     # ========================================================
@@ -573,8 +589,15 @@ def main():
     print("GUARDANDO ARCHIVO")
     print("=" * 60)
 
+    # Excel
     noticias.to_excel(
         ruta_salida,
+        index=False
+    )
+
+    # Parquet
+    noticias.to_parquet(
+        ruta_salida_parquet,
         index=False
     )
 
