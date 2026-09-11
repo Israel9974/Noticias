@@ -1,9 +1,8 @@
-name: Prueba Jueves 21:30
+name: Prueba Viernes
 
 on:
   schedule:
-    - cron: '56 21 * * 4'
-      timezone: "America/Lima"
+    - cron: '0 12 * * 5'
 
   workflow_dispatch:
 
