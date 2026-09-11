@@ -1,0 +1,202 @@
+name: Enviar datos a Storage
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Ejecutar todos los días a las 03:00 UTC
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+
+  enviar-storage:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # =====================================================
+      # 1. DESCARGAR EL REPOSITORIO DE NOTICIAS
+      # =====================================================
+
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+
+      # =====================================================
+      # 2. VERIFICAR ARCHIVOS DE PIURA
+      # =====================================================
+
+      - name: Revisar datos de Piura
+        shell: bash
+        run: |
+
+          echo "=========================================="
+          echo "DATOS DE PIURA"
+          echo "=========================================="
+
+          if [ -d "Data/Piura" ]; then
+
+            echo "✓ Carpeta Data/Piura encontrada"
+
+            find Data/Piura -type f -print
+
+          else
+
+            echo "⚠ No existe Data/Piura"
+
+          fi
+
+
+      # =====================================================
+      # 3. VERIFICAR ARCHIVOS DE LAMBAYEQUE
+      # =====================================================
+
+      - name: Revisar datos de Lambayeque
+        shell: bash
+        run: |
+
+          echo "=========================================="
+          echo "DATOS DE LAMBAYEQUE"
+          echo "=========================================="
+
+          if [ -d "Data/Lambayeque" ]; then
+
+            echo "✓ Carpeta Data/Lambayeque encontrada"
+
+            find Data/Lambayeque -type f -print
+
+          else
+
+            echo "⚠ No existe Data/Lambayeque"
+
+          fi
+
+
+      # =====================================================
+      # 4. CLONAR REPOSITORIO STORAGE
+      # =====================================================
+
+      - name: Descargar repositorio Storage
+        env:
+          STORAGE_TOKEN: ${{ secrets.STORAGE_TOKEN }}
+        run: |
+
+          git clone \
+            https://x-access-token:${STORAGE_TOKEN}@github.com/Israel9974/Storage.git \
+            storage
+
+
+      # =====================================================
+      # 5. CREAR CARPETAS DE DESTINO
+      # =====================================================
+
+      - name: Crear estructura Storage
+        run: |
+
+          mkdir -p storage/noticias/Piura
+          mkdir -p storage/noticias/Lambayeque
+
+
+      # =====================================================
+      # 6. COPIAR DATOS DE PIURA
+      # =====================================================
+
+      - name: Copiar datos de Piura
+        shell: bash
+        run: |
+
+          if [ -d "Data/Piura" ]; then
+
+            echo "Copiando datos de Piura..."
+
+            cp -r Data/Piura/* storage/noticias/Piura/ || true
+
+            echo "✓ Piura copiado"
+
+          else
+
+            echo "⚠ No hay datos de Piura para copiar"
+
+          fi
+
+
+      # =====================================================
+      # 7. COPIAR DATOS DE LAMBAYEQUE
+      # =====================================================
+
+      - name: Copiar datos de Lambayeque
+        shell: bash
+        run: |
+
+          if [ -d "Data/Lambayeque" ]; then
+
+            echo "Copiando datos de Lambayeque..."
+
+            cp -r Data/Lambayeque/* storage/noticias/Lambayeque/ || true
+
+            echo "✓ Lambayeque copiado"
+
+          else
+
+            echo "⚠ No hay datos de Lambayeque para copiar"
+
+          fi
+
+
+      # =====================================================
+      # 8. CONFIGURAR GIT
+      # =====================================================
+
+      - name: Configurar Git
+        working-directory: storage
+        run: |
+
+          git config user.name "github-actions[bot]"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+
+      # =====================================================
+      # 9. MOSTRAR CAMBIOS
+      # =====================================================
+
+      - name: Revisar cambios
+        working-directory: storage
+        run: |
+
+          echo "=========================================="
+          echo "CAMBIOS DETECTADOS"
+          echo "=========================================="
+
+          git status --short
+
+
+      # =====================================================
+      # 10. COMMIT Y PUSH
+      # =====================================================
+
+      - name: Guardar datos en Storage
+        working-directory: storage
+        run: |
+
+          git add noticias/
+
+          if git diff --cached --quiet; then
+
+            echo "No hay cambios nuevos."
+
+          else
+
+            git commit \
+              -m "Actualizar datos de noticias"
+
+            git push
+
+            echo "✓ Datos enviados correctamente a Storage"
+
+          fi
