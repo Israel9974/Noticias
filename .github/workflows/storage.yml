@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
 
+
 jobs:
 
   guardar-storage:
@@ -25,6 +26,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
 
     runs-on: ubuntu-latest
+
 
     steps:
 
@@ -55,12 +57,31 @@ jobs:
 
 
       # =====================================================
-      # 3. CLONAR REPOSITORIO STORAGE
+      # 3. INSTALAR PYTHON Y DEPENDENCIAS
+      # =====================================================
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+
+      - name: Instalar pandas y pyarrow
+        run: |
+
+          python -m pip install --upgrade pip
+
+          pip install pandas pyarrow
+
+
+      # =====================================================
+      # 4. CLONAR REPOSITORIO STORAGE
       # =====================================================
 
       - name: Descargar repositorio Storage
         env:
           STORAGE_TOKEN: ${{ secrets.STORAGE_TOKEN }}
+
         run: |
 
           echo "=========================================="
@@ -75,7 +96,7 @@ jobs:
 
 
       # =====================================================
-      # 4. CREAR ESTRUCTURA DE CARPETAS
+      # 5. CREAR ESTRUCTURA DE CARPETAS
       # =====================================================
 
       - name: Crear carpetas de Storage
@@ -95,7 +116,7 @@ jobs:
 
 
       # =====================================================
-      # 5. COPIAR EXCEL DE PIURA
+      # 6. COPIAR EXCEL DE PIURA
       # =====================================================
 
       - name: Copiar Excel de Piura
@@ -123,7 +144,7 @@ jobs:
 
 
       # =====================================================
-      # 6. COPIAR PARQUET DE PIURA
+      # 7. COPIAR PARQUET DE PIURA
       # =====================================================
 
       - name: Copiar Parquet de Piura
@@ -136,7 +157,6 @@ jobs:
           if [ -d "Data/Piura" ]; then
 
             find Data/Piura \
-              -maxdepth 1 \
               -type f \
               -name "*.parquet" \
               -exec cp {} storage_repo/noticias/piura/parquet/ \;
@@ -151,7 +171,7 @@ jobs:
 
 
       # =====================================================
-      # 7. COPIAR EXCEL DE LAMBAYEQUE
+      # 8. COPIAR EXCEL DE LAMBAYEQUE
       # =====================================================
 
       - name: Copiar Excel de Lambayeque
@@ -179,7 +199,7 @@ jobs:
 
 
       # =====================================================
-      # 8. COPIAR PARQUET DE LAMBAYEQUE
+      # 9. COPIAR PARQUET DE LAMBAYEQUE
       # =====================================================
 
       - name: Copiar Parquet de Lambayeque
@@ -192,7 +212,6 @@ jobs:
           if [ -d "Data/Lambayeque" ]; then
 
             find Data/Lambayeque \
-              -maxdepth 1 \
               -type f \
               -name "*.parquet" \
               -exec cp {} storage_repo/noticias/lambayeque/parquet/ \;
@@ -207,84 +226,260 @@ jobs:
 
 
       # =====================================================
-      # 9. CREAR ÍNDICE DE PARQUET DE PIURA
+      # 10. CREAR PARQUETS CONSOLIDADOS
       # =====================================================
 
-      - name: Crear índice Parquet de Piura
+      - name: Generar Parquet consolidados
         run: |
 
           echo "=========================================="
-          echo "ÍNDICE PARQUET - PIURA"
+          echo "GENERANDO PARQUETS CONSOLIDADOS"
           echo "=========================================="
 
-          cd storage_repo/noticias/piura/parquet
+          python <<'PY'
 
-          python - <<'PY'
-          import json
-          from pathlib import Path
+          import os
+          import pandas as pd
 
-          carpeta = Path(".")
 
-          archivos = sorted(
-              archivo.name
-              for archivo in carpeta.glob("*.parquet")
-          )
+          # =================================================
+          # FUNCIÓN PARA CONSOLIDAR UNA REGIÓN
+          # =================================================
 
-          with open("indice.json", "w", encoding="utf-8") as archivo:
-              json.dump(
-                  archivos,
-                  archivo,
-                  ensure_ascii=False,
-                  indent=2
+          def consolidar_region(region):
+
+              carpeta = (
+                  f"storage_repo/noticias/"
+                  f"{region}/parquet"
               )
 
-          print(f"✓ Archivos Parquet encontrados: {len(archivos)}")
-
-          print("Contenido del índice:")
-
-          for archivo in archivos:
-              print(f"  - {archivo}")
-          PY
-
-
-      # =====================================================
-      # 10. CREAR ÍNDICE DE PARQUET DE LAMBAYEQUE
-      # =====================================================
-
-      - name: Crear índice Parquet de Lambayeque
-        run: |
-
-          echo "=========================================="
-          echo "ÍNDICE PARQUET - LAMBAYEQUE"
-          echo "=========================================="
-
-          cd storage_repo/noticias/lambayeque/parquet
-
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          carpeta = Path(".")
-
-          archivos = sorted(
-              archivo.name
-              for archivo in carpeta.glob("*.parquet")
-          )
-
-          with open("indice.json", "w", encoding="utf-8") as archivo:
-              json.dump(
-                  archivos,
-                  archivo,
-                  ensure_ascii=False,
-                  indent=2
+              archivo_salida = (
+                  f"noticias_{region}_consolidado.parquet"
               )
 
-          print(f"✓ Archivos Parquet encontrados: {len(archivos)}")
+              ruta_salida = os.path.join(
+                  carpeta,
+                  archivo_salida
+              )
 
-          print("Contenido del índice:")
 
-          for archivo in archivos:
-              print(f"  - {archivo}")
+              print()
+              print("=" * 60)
+              print(
+                  f"CONSOLIDANDO: "
+                  f"{region.upper()}"
+              )
+              print("=" * 60)
+
+
+              # =============================================
+              # VERIFICAR CARPETA
+              # =============================================
+
+              if not os.path.exists(carpeta):
+
+                  print(
+                      f"⚠ No existe: {carpeta}"
+                  )
+
+                  return
+
+
+              # =============================================
+              # BUSCAR PARQUETS
+              # =============================================
+
+              archivos = []
+
+              for nombre in os.listdir(carpeta):
+
+                  if not nombre.lower().endswith(
+                      ".parquet"
+                  ):
+                      continue
+
+                  # No incluir el consolidado
+                  if nombre == archivo_salida:
+                      continue
+
+                  archivos.append(nombre)
+
+
+              archivos.sort()
+
+
+              print(
+                  f"Parquets encontrados: "
+                  f"{len(archivos)}"
+              )
+
+
+              # =============================================
+              # SI NO HAY ARCHIVOS
+              # =============================================
+
+              if not archivos:
+
+                  print(
+                      "⚠ No hay Parquet para consolidar."
+                  )
+
+                  return
+
+
+              # =============================================
+              # LEER TODOS LOS PARQUETS
+              # =============================================
+
+              tablas = []
+
+              for nombre in archivos:
+
+                  ruta = os.path.join(
+                      carpeta,
+                      nombre
+                  )
+
+                  print(
+                      f"Leyendo: {nombre}"
+                  )
+
+                  try:
+
+                      df = pd.read_parquet(
+                          ruta
+                      )
+
+                      # =====================================
+                      # AGREGAR NOMBRE DEL ARCHIVO ORIGINAL
+                      # =====================================
+
+                      df["ARCHIVO_ORIGEN"] = nombre
+
+                      tablas.append(df)
+
+                      print(
+                          f"  ✓ {len(df)} filas"
+                      )
+
+                  except Exception as error:
+
+                      print(
+                          f"  ⚠ ERROR leyendo "
+                          f"{nombre}: {error}"
+                      )
+
+
+              # =============================================
+              # VERIFICAR DATOS
+              # =============================================
+
+              if not tablas:
+
+                  print(
+                      "⚠ No se pudo leer ningún Parquet."
+                  )
+
+                  return
+
+
+              # =============================================
+              # UNIR TODOS
+              # =============================================
+
+              consolidado = pd.concat(
+                  tablas,
+                  ignore_index=True
+              )
+
+
+              # =============================================
+              # ELIMINAR DUPLICADOS EXACTOS
+              # =============================================
+
+              antes = len(consolidado)
+
+              consolidado = consolidado.drop_duplicates(
+                  ignore_index=True
+              )
+
+              despues = len(consolidado)
+
+
+              if antes != despues:
+
+                  print(
+                      f"Duplicados eliminados: "
+                      f"{antes - despues}"
+                  )
+
+
+              # =============================================
+              # GUARDAR
+              # =============================================
+
+              consolidado.to_parquet(
+                  ruta_salida,
+                  index=False
+              )
+
+
+              print()
+              print(
+                  f"✓ Consolidado generado:"
+              )
+
+              print(
+                  f"  {ruta_salida}"
+              )
+
+              print(
+                  f"  Filas: {len(consolidado)}"
+              )
+
+              print(
+                  f"  Columnas: "
+                  f"{len(consolidado.columns)}"
+              )
+
+
+              print()
+              print(
+                  "Columnas:"
+              )
+
+              for columna in consolidado.columns:
+
+                  print(
+                      f"  - {columna}"
+                  )
+
+
+          # =================================================
+          # PIURA
+          # =================================================
+
+          consolidar_region(
+              "piura"
+          )
+
+
+          # =================================================
+          # LAMBAYEQUE
+          # =================================================
+
+          consolidar_region(
+              "lambayeque"
+          )
+
+
+          print()
+          print("=" * 60)
+          print(
+              "✓ CONSOLIDACIÓN TERMINADA"
+          )
+          print("=" * 60)
+
           PY
 
 
@@ -299,7 +494,9 @@ jobs:
           echo "ARCHIVOS EN STORAGE"
           echo "=========================================="
 
-          find storage_repo/noticias -type f -print
+          find storage_repo/noticias \
+            -type f \
+            -print
 
 
       # =====================================================
@@ -310,7 +507,8 @@ jobs:
         working-directory: storage_repo
         run: |
 
-          git config user.name "github-actions[bot]"
+          git config user.name \
+            "github-actions[bot]"
 
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
