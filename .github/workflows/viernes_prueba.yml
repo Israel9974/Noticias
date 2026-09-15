@@ -2,7 +2,7 @@ name: Prueba Viernes
 
 on:
   schedule:
-    - cron: '0 12 * * 0'
+    - cron: '0 10 * * 1'
 
   workflow_dispatch:
 
