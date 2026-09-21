@@ -14,7 +14,7 @@ from scrapers.gestion import scrape_gestion
 
 REGION = "lambayeque"
 
-NEWS_NUMBER_ANDINA = 5
+NEWS_NUMBER_ANDINA = 20
 NEWS_NUMBER_EL_COMERCIO = 20
 NEWS_NUMBER_GESTION = 20
 
