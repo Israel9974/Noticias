@@ -1,3 +1,4 @@
+
 name: Prueba Viernes
 
 on:
@@ -9,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: noticias-actualizacion
+  cancel-in-progress: false
+
 jobs:
   ejecutar-noticias:
     name: Ejecutar scrapers
@@ -17,6 +22,8 @@ jobs:
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -45,7 +52,11 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "No hay archivos nuevos para guardar."
-          else
-            git commit -m "Actualización automática de noticias"
-            git push
+            exit 0
           fi
+
+          git commit -m "Actualización automática de noticias"
+
+          git pull --rebase origin main
+
+          git push origin main
