@@ -1,4 +1,5 @@
 import json
+import re
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -8,22 +9,52 @@ from requests.exceptions import RequestException
 
 BASE_URL = "https://peru21.pe"
 
+# True  -> además del listado, abre cada nota para intentar obtener
+#          el texto completo y la fecha de publicación (más lento).
+# False -> usa solo lo que muestra el listado (fecha y resumen):
+#          mucho más rápido y con muchas menos peticiones.
+DESCARGAR_TEXTO_COMPLETO = True
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 "
+        "(Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 "
+        "(KHTML, like Gecko) "
+        "Chrome/140.0.0.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,"
+        "application/xml;q=0.9,image/avif,"
+        "image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
+    "Referer": "https://www.google.com/",
+    "Upgrade-Insecure-Requests": "1"
+}
+
 
 class Scraper3:
     """
     Scraper auxiliar para Perú 21.
 
-    Obtiene:
-    - titulares
-    - enlaces
-    - fechas
-    - contenido
+    Perú 21 usa Drupal. Cada nota del listado tiene esta forma:
 
-    Perú 21 pertenece al mismo grupo que El Comercio y Gestión,
-    así que se usa el mismo selector de listado y el mismo método
-    para fechas y contenido (JSON-LD de cada nota).
-    Si el selector principal no encuentra nada, se usa uno
-    alternativo basado en los titulares (h2 / h3).
+        <article class="node node--type-article ...">
+          <div class="fecha-teaser-2col"> 2026-11-12 12:01 </div>
+          <div class="titulo-teaser-2col">
+            <a href="/peru/..."><h2>Titular</h2></a>
+          </div>
+          <div class="entradilla-teaser-2col"> resumen </div>
+        </article>
+
+    Del listado se toma titular, link, fecha y resumen.
+    Si DESCARGAR_TEXTO_COMPLETO es True, se abre cada nota para
+    obtener el texto completo y la fecha de publicación (JSON-LD);
+    si no se puede, se queda con lo del listado.
+
+    IMPORTANTE: Perú 21 devuelve 403 si la petición no trae
+    cabeceras de navegador completas, por eso se usan HEADERS.
     """
 
     def __init__(self, url, news_number=20):
@@ -32,23 +63,12 @@ class Scraper3:
         self.news_number = news_number
 
         self.session = requests.Session()
-
-        self.session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 "
-                "(Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 "
-                "(KHTML, like Gecko) "
-                "Chrome/140.0 Safari/537.36"
-            ),
-            "Accept-Language": "es-PE,es;q=0.9"
-        })
+        self.session.headers.update(HEADERS)
 
         # Cada nota se descarga UNA sola vez
-        # (fecha y contenido salen de la misma descarga)
         self._cache = {}
 
-        # Lista de tuplas (titular, link)
+        # Lista de diccionarios: titular, link, fecha, entradilla
         self.items = self.main_scraper()
 
     # ============================================================
@@ -82,23 +102,13 @@ class Scraper3:
         )
 
         # --------------------------------------------------------
-        # Selector principal (mismo que Gestión / El Comercio)
+        # Estructura actual (Drupal)
         # --------------------------------------------------------
 
-        anchors = []
-
-        for caja in soup.select(
-            "div.story-item__information-box"
-        ):
-
-            anchors.append(
-                caja.select_one("h2 a, h3 a")
-            )
-
-        items = self._armar_items(anchors)
+        items = self._items_desde_articulos(soup)
 
         # --------------------------------------------------------
-        # Selector alternativo
+        # Respaldo: cualquier titular h2/h3 con enlace
         # --------------------------------------------------------
 
         if not items:
@@ -108,64 +118,149 @@ class Scraper3:
                 "Usando selector alternativo..."
             )
 
-            items = self._armar_items(
-                soup.select("h2 a, h3 a")
-            )
+            items = self._items_desde_titulares(soup)
 
         print(f"Artículos encontrados: {len(items)}")
 
         return items
 
     # ============================================================
-    # ARMAR LISTA (titular, link)
+    # NOTAS DEL LISTADO
     # ============================================================
 
-    def _armar_items(self, anchors):
+    def _items_desde_articulos(self, soup):
 
         items = []
         vistos = set()
 
-        for a in anchors:
+        # "node--type-article" evita contar los <article> internos
+        # de las imágenes (media)
+        for art in soup.select("article.node--type-article"):
+
+            titulo = art.select_one("h2, h3")
+
+            if titulo is None:
+                continue
+
+            a = titulo.find_parent("a") or titulo.find("a")
 
             if a is None:
                 continue
 
-            href = a.get("href")
-            titular = a.get_text(" ", strip=True)
+            link = self._link_valido(a.get("href"))
 
-            if not href or not titular:
+            if not link or link in vistos:
                 continue
 
-            link = urljoin(BASE_URL, href)
+            titular = titulo.get_text(" ", strip=True)
 
-            partes = urlparse(link)
-
-            # Solo notas de peru21.pe
-            if not partes.netloc.endswith("peru21.pe"):
+            if not titular:
                 continue
 
-            segmentos = [
-                s for s in partes.path.split("/") if s
-            ]
+            # Fecha del listado: "2026-11-12 12:01"
+            fecha = ""
 
-            # Descartar secciones y páginas de etiquetas
-            if len(segmentos) < 2:
-                continue
+            fecha_tag = art.select_one('[class*="fecha"]')
 
-            if segmentos[0] == "noticias":
-                continue
+            if fecha_tag is not None:
 
-            if link in vistos:
-                continue
+                coincidencia = re.search(
+                    r"\d{4}-\d{2}-\d{2}",
+                    fecha_tag.get_text(" ", strip=True)
+                )
+
+                if coincidencia:
+                    fecha = coincidencia.group(0)
+
+            # Resumen del listado
+            entradilla = ""
+
+            entradilla_tag = art.select_one(
+                '[class*="entradilla"]'
+            )
+
+            if entradilla_tag is not None:
+
+                entradilla = entradilla_tag.get_text(
+                    " ",
+                    strip=True
+                )
 
             vistos.add(link)
 
-            items.append((titular, link))
+            items.append({
+                "titular": titular,
+                "link": link,
+                "fecha": fecha,
+                "entradilla": entradilla
+            })
 
             if len(items) >= self.news_number:
                 break
 
         return items
+
+    def _items_desde_titulares(self, soup):
+
+        items = []
+        vistos = set()
+
+        for titulo in soup.select("h2, h3"):
+
+            a = titulo.find_parent("a") or titulo.find("a")
+
+            if a is None:
+                continue
+
+            link = self._link_valido(a.get("href"))
+
+            if not link or link in vistos:
+                continue
+
+            titular = titulo.get_text(" ", strip=True)
+
+            if not titular:
+                continue
+
+            vistos.add(link)
+
+            items.append({
+                "titular": titular,
+                "link": link,
+                "fecha": "",
+                "entradilla": ""
+            })
+
+            if len(items) >= self.news_number:
+                break
+
+        return items
+
+    def _link_valido(self, href):
+
+        if not href:
+            return ""
+
+        link = urljoin(BASE_URL, href)
+
+        partes = urlparse(link)
+
+        # Solo notas de peru21.pe
+        if not partes.netloc.endswith("peru21.pe"):
+            return ""
+
+        segmentos = [
+            s for s in partes.path.split("/") if s
+        ]
+
+        # Descartar secciones y páginas de etiquetas
+        if len(segmentos) < 2:
+            return ""
+
+        if segmentos[0] in ("noticias", "autor"):
+            return ""
+
+        return link
 
     # ============================================================
     # TITULARES Y LINKS
@@ -173,11 +268,11 @@ class Scraper3:
 
     def header_scraper(self):
 
-        return [titular for titular, _ in self.items]
+        return [item["titular"] for item in self.items]
 
     def link_scraper(self):
 
-        return [link for _, link in self.items]
+        return [item["link"] for item in self.items]
 
     # ============================================================
     # JSON-LD
@@ -242,7 +337,7 @@ class Scraper3:
         return ""
 
     # ============================================================
-    # DATOS DE UNA NOTA (fecha + contenido)
+    # DATOS DE UNA NOTA (fecha de publicación + texto completo)
     # ============================================================
 
     def _datos_nota(self, link):
@@ -250,7 +345,13 @@ class Scraper3:
         if link in self._cache:
             return self._cache[link]
 
-        datos = {"fecha": "", "descripcion": ""}
+        datos = {"fecha": "", "cuerpo": "", "resumen": ""}
+
+        if not DESCARGAR_TEXTO_COMPLETO:
+
+            self._cache[link] = datos
+
+            return datos
 
         try:
 
@@ -314,10 +415,8 @@ class Scraper3:
                 )
 
             datos["fecha"] = fecha.strip()
-
-            datos["descripcion"] = (
-                cuerpo or resumen
-            ).strip()
+            datos["cuerpo"] = cuerpo.strip()
+            datos["resumen"] = resumen.strip()
 
         except Exception as error:
 
@@ -331,46 +430,61 @@ class Scraper3:
 
     # ============================================================
     # FECHAS
+    #
+    # Prioridad: fecha de publicación de la nota (JSON-LD);
+    # si no hay, la fecha que muestra el listado.
     # ============================================================
 
     def date_scraper(self):
 
         fechas = []
 
-        links = self.link_scraper()
+        total = len(self.items)
 
-        for i, link in enumerate(links, start=1):
+        for i, item in enumerate(self.items, start=1):
 
-            print(
-                f"Extrayendo fecha Perú 21 "
-                f"{i}/{len(links)}..."
+            if DESCARGAR_TEXTO_COMPLETO:
+
+                print(
+                    f"Extrayendo fecha Perú 21 {i}/{total}..."
+                )
+
+            fecha = (
+                self._datos_nota(item["link"])["fecha"]
+                or item["fecha"]
             )
 
-            fechas.append(
-                self._datos_nota(link)["fecha"]
-            )
+            fechas.append(fecha)
 
         return fechas
 
     # ============================================================
     # CONTENIDO
+    #
+    # Prioridad: texto completo (articleBody) > resumen del
+    # listado > descripción de la nota.
     # ============================================================
 
     def news_scraper(self):
 
         descripciones = []
 
-        links = self.link_scraper()
+        total = len(self.items)
 
-        for i, link in enumerate(links, start=1):
+        for i, item in enumerate(self.items, start=1):
 
-            print(
-                f"Extrayendo contenido Perú 21 "
-                f"{i}/{len(links)}..."
-            )
+            if DESCARGAR_TEXTO_COMPLETO:
+
+                print(
+                    f"Extrayendo contenido Perú 21 {i}/{total}..."
+                )
+
+            datos = self._datos_nota(item["link"])
 
             descripciones.append(
-                self._datos_nota(link)["descripcion"]
+                datos["cuerpo"]
+                or item["entradilla"]
+                or datos["resumen"]
             )
 
         return descripciones
