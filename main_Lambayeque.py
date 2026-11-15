@@ -23,7 +23,7 @@ NEWS_NUMBER_PERU21 = 30
 NEWS_NUMBER_RPP = 30
 
 PAGINAS_I = 1
-PAGINAS_F = 10
+PAGINAS_F = 5
 
 
 # ============================================================
