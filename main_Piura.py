@@ -15,13 +15,13 @@ from scrapers.gestion import scrape_gestion
 
 REGION = "piura"
 
-NEWS_NUMBER_EL_TIEMPO = 30
-NEWS_NUMBER_ANDINA = 20
-NEWS_NUMBER_EL_COMERCIO = 30
-NEWS_NUMBER_GESTION = 20
+NEWS_NUMBER_EL_TIEMPO = 40
+NEWS_NUMBER_ANDINA = 40
+NEWS_NUMBER_EL_COMERCIO = 40
+NEWS_NUMBER_GESTION = 40
 
 PAGINAS_I = 1
-PAGINAS_F = 2
+PAGINAS_F = 15
 
 
 # ============================================================
