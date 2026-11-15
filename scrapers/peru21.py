@@ -106,9 +106,10 @@ class Peru21:
         # --------------------------------------------------------
         # Convertir fechas
         #
-        # Perú 21 devuelve algo como:
-        # 2026-11-10T12:30:00-05:00
-        # Nos quedamos con 2026-11-10
+        # Perú 21 puede devolver:
+        # 2026-11-10T12:30:00-05:00   (JSON-LD de la nota)
+        # 2026-11-10 12:01            (listado)
+        # En ambos casos nos quedamos con 2026-11-10
         # --------------------------------------------------------
 
         fechas_convertidas = []
@@ -122,7 +123,9 @@ class Peru21:
                 fechas_convertidas.append(None)
                 continue
 
-            fecha = fecha.split("T")[0]
+            # "AAAA-MM-DD" son los primeros 10 caracteres,
+            # venga con "T" o con espacio
+            fecha = fecha[:10]
 
             try:
 
