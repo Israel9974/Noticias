@@ -1,81 +1,265 @@
-# %% [markdown]
-# # Código Perú 21
-
-# %%
 import pandas as pd
-from peru21_scraper import Scraper3
-from helpers import Helper
+
 from datetime import datetime
-import os
-import json
-import re
 
-# %%
+from .peru21_scraper import Scraper3
+
+
+COLUMNAS = [
+    "DIARIO",
+    "DIA",
+    "TITULAR",
+    "DESCRIPCIÓN",
+    "LINKS"
+]
+
+
 class Peru21:
-    """ Un scraper de las paginas del diario peruano Peru21.
-        Se extrae el titulo, breve descripción y el enlace de referencia. """
+    """
+    Scraper del diario Perú 21.
 
-    def __init__(self, main_url, news_number):
+    Extrae:
+    - Diario
+    - Fecha
+    - Titular
+    - Descripción
+    - Link
+    """
+
+    def __init__(
+        self,
+        main_url,
+        news_number=20
+    ):
+
         self.main_url = main_url
         self.news_number = news_number
 
-    def dframe(self):
-        """ Haciendo el data-frame y exportandolo a un archivo .csv """
-        news = Scraper3(self.main_url, self.news_number)
-        news_scraper = pd.DataFrame({
-            'DIARIO': 'Perú 21',
-            'DIA': news.date_scraper(),
-            'TITULAR': news.header_scraper(),
-            'DESCRIPCIÓN': news.news_scraper(),
-            'LINKS': news.link_scraper()
-        })
-        news_scraper['DESCRIPCIÓN'] = news_scraper['DESCRIPCIÓN'].replace(re.compile("&[a-zA-Z]+?;")," ")
-        news_scraper['DIA'] = pd.to_datetime(news_scraper['DIA'], format='%Y-%m-%d').dt.date
-        
-        return news_scraper
-    
-    def _export_to_xlsx(self):
-        self.dframe().to_excel(f"./excel_files/peru21_" + paginas + f"_{Helper.filename_generator(1)}", index=False)
-    
-    def export(self, output):
-        """ Funcion que exporta datos en diferentes formatos, format_option: 1: CSV ,  2:JSON. """
-        if output == 1:
-            self._export_to_xlsx()
+    # ============================================================
+    # DATAFRAME
+    # ============================================================
 
-# %%
+    def dframe(self):
+
+        print("Creando Scraper de Perú 21...")
+
+        news = Scraper3(
+            self.main_url,
+            self.news_number
+        )
+
+        print("Extrayendo fechas...")
+        fechas = news.date_scraper() or []
+
+        print("Extrayendo titulares...")
+        titulares = news.header_scraper() or []
+
+        print("Extrayendo links...")
+        links = news.link_scraper() or []
+
+        print("Extrayendo descripciones...")
+        descripciones = news.news_scraper() or []
+
+        print(f"Fechas obtenidas: {len(fechas)}")
+        print(f"Titulares obtenidos: {len(titulares)}")
+        print(f"Links obtenidos: {len(links)}")
+        print(f"Descripciones obtenidas: {len(descripciones)}")
+
+        cantidad = min(
+            len(fechas),
+            len(titulares),
+            len(links),
+            len(descripciones)
+        )
+
+        print(f"Noticias completas: {cantidad}")
+
+        if cantidad == 0:
+
+            print("⚠ Perú 21 no devolvió noticias completas.")
+
+            return pd.DataFrame(columns=COLUMNAS)
+
+        noticias = pd.DataFrame({
+            "DIARIO": ["Perú 21"] * cantidad,
+            "DIA": fechas[:cantidad],
+            "TITULAR": titulares[:cantidad],
+            "DESCRIPCIÓN": descripciones[:cantidad],
+            "LINKS": links[:cantidad]
+        })
+
+        print(f"DataFrame creado: {len(noticias)} filas")
+
+        # --------------------------------------------------------
+        # Limpiar descripción
+        # --------------------------------------------------------
+
+        noticias.loc[:, "DESCRIPCIÓN"] = (
+            noticias["DESCRIPCIÓN"]
+            .fillna("")
+            .astype(str)
+            .str.replace(r"&[a-zA-Z]+?;", " ", regex=True)
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+        )
+
+        # --------------------------------------------------------
+        # Convertir fechas
+        #
+        # Perú 21 devuelve algo como:
+        # 2026-11-10T12:30:00-05:00
+        # Nos quedamos con 2026-11-10
+        # --------------------------------------------------------
+
+        fechas_convertidas = []
+
+        for fecha in noticias["DIA"].tolist():
+
+            fecha = str(fecha or "").strip()
+
+            if not fecha:
+
+                fechas_convertidas.append(None)
+                continue
+
+            fecha = fecha.split("T")[0]
+
+            try:
+
+                fechas_convertidas.append(
+                    datetime.strptime(
+                        fecha,
+                        "%Y-%m-%d"
+                    ).date()
+                )
+
+            except ValueError:
+
+                print(
+                    f"⚠ No se pudo convertir "
+                    f"fecha de Perú 21: {fecha}"
+                )
+
+                fechas_convertidas.append(None)
+
+        noticias["DIA"] = pd.Series(
+            fechas_convertidas,
+            index=noticias.index,
+            dtype="object"
+        )
+
+        print("Fechas de Perú 21 convertidas.")
+
+        return noticias
+
+
+# ================================================================
+# FUNCIÓN PRINCIPAL
+# ================================================================
+
+def scrape_peru21(
+    region,
+    paginas_i=1,
+    paginas_f=2,
+    news_number=20
+):
+    """
+    Ejecuta el scraper de Perú 21.
+
+    paginas_f es exclusivo: paginas_i=1 y paginas_f=2
+    procesa únicamente la página 1.
+    """
+
+    resultados = []
+
+    print()
+    print("=" * 60)
+    print("PERÚ 21")
+    print("=" * 60)
+
+    for pagina in range(paginas_i, paginas_f):
+
+        # La página 1 es la URL sin número;
+        # de la 2 en adelante lleva /<número>/
+        if pagina == 1:
+
+            url = f"https://peru21.pe/noticias/{region}/"
+
+        else:
+
+            url = f"https://peru21.pe/noticias/{region}/{pagina}/"
+
+        print()
+        print("-" * 60)
+        print(f"Perú 21 - página {pagina}")
+        print(f"URL: {url}")
+        print("-" * 60)
+
+        try:
+
+            resultado = Peru21(
+                main_url=url,
+                news_number=news_number
+            ).dframe()
+
+            if resultado.empty:
+
+                print(
+                    f"⚠ Página {pagina}: "
+                    "no se obtuvieron noticias."
+                )
+
+            else:
+
+                resultados.append(resultado)
+
+                print(
+                    f"Página {pagina} terminada. "
+                    f"Noticias obtenidas: {len(resultado)}"
+                )
+
+        except Exception as error:
+
+            print()
+            print(
+                f"❌ Error procesando "
+                f"Perú 21 página {pagina}:"
+            )
+
+            print(error)
+
+    if resultados:
+
+        peru21 = pd.concat(
+            resultados,
+            ignore_index=True
+        )
+
+    else:
+
+        peru21 = pd.DataFrame(columns=COLUMNAS)
+
+    print()
+    print("=" * 60)
+    print("¡PERÚ 21 TERMINÓ!")
+    print(f"Total de noticias: {len(peru21)}")
+    print("=" * 60)
+
+    return peru21
+
+
+# ================================================================
+# PRUEBA DIRECTA
+# ================================================================
+
 if __name__ == "__main__":
 
-    try:
-        output = 1
-        p_number = 12
+    resultado = scrape_peru21(
+        region="piura",
+        paginas_i=1,
+        paginas_f=2,
+        news_number=20
+    )
 
-        # paginas_i = input('¿Desea empezar desde el inicio? Coloque "1" para "Sí" o el número de la página donde desea comenzar: ')
-        # paginas_i = int(paginas_i)
-        # if paginas_i < 0:
-        #     raise ValueError('Por favor inserte un número de página valido')      
-        # paginas_i = paginas_i
-        
-        # paginas_f = input('¿Hasta dónde desea revisar?: ')
-        # paginas_f = int(paginas_f)
-        # if paginas_f < paginas_i:
-        #     raise ValueError('Por favor inserte un número de página valido')
-        # paginas_f = int(paginas_f)+1
-
-        peru21 = pd.DataFrame()
-        
-        for i in range(paginas_i, paginas_f):
-            i = str(i)
-            noticias_et = Peru21('https://peru21.pe/noticias/' + region + '/' + i, p_number)
-            globals()['pagina_' + i] = noticias_et.dframe()
-            peru21 = pd.concat([peru21, globals()['pagina_' + i]], ignore_index=True)
-
-        fecha_ref = datetime.now()
-        
-#        peru21.to_excel(f"./excel_files/peru21_{fecha_ref.year}_{fecha_ref.month}_{fecha_ref.day}.xlsx", index=False)
-        
-        print(f'¡El archivo de PERÚ 21 está listo!')
-
-    except ValueError as ex:
-        print(ex)
-
-
+    print()
+    print(resultado)
