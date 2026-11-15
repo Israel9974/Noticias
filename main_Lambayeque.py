@@ -6,6 +6,8 @@ from datetime import date, timedelta, datetime
 from scrapers.andina import scrape_andina
 from scrapers.el_comercio import scrape_el_comercio
 from scrapers.gestion import scrape_gestion
+from scrapers.peru21 import scrape_peru21
+from scrapers.rpp import scrape_rpp
 
 
 # ============================================================
@@ -14,12 +16,14 @@ from scrapers.gestion import scrape_gestion
 
 REGION = "lambayeque"
 
-NEWS_NUMBER_ANDINA = 20
-NEWS_NUMBER_EL_COMERCIO = 20
-NEWS_NUMBER_GESTION = 20
+NEWS_NUMBER_ANDINA = 30
+NEWS_NUMBER_EL_COMERCIO = 30
+NEWS_NUMBER_GESTION = 30
+NEWS_NUMBER_PERU21 = 30
+NEWS_NUMBER_RPP = 30
 
 PAGINAS_I = 1
-PAGINAS_F = 2
+PAGINAS_F = 10
 
 
 # ============================================================
@@ -235,6 +239,70 @@ def main():
 
 
     # ========================================================
+    # PERÚ 21
+    # ========================================================
+
+    print()
+    print("=" * 60)
+    print("INICIANDO PERÚ 21")
+    print("=" * 60)
+
+    try:
+
+        peru21 = scrape_peru21(
+            region=REGION,
+            paginas_i=PAGINAS_I,
+            paginas_f=PAGINAS_F,
+            news_number=NEWS_NUMBER_PERU21
+        )
+
+        print()
+        print(
+            f"Perú 21 terminado: "
+            f"{len(peru21)} noticias"
+        )
+
+    except Exception as error:
+
+        print()
+        print("ERROR EN PERÚ 21:")
+        print(error)
+
+        peru21 = dataframe_vacio()
+
+
+    # ========================================================
+    # RPP
+    # ========================================================
+
+    print()
+    print("=" * 60)
+    print("INICIANDO RPP")
+    print("=" * 60)
+
+    try:
+
+        rpp = scrape_rpp(
+            region=REGION,
+            news_number=NEWS_NUMBER_RPP
+        )
+
+        print()
+        print(
+            f"RPP terminado: "
+            f"{len(rpp)} noticias"
+        )
+
+    except Exception as error:
+
+        print()
+        print("ERROR EN RPP:")
+        print(error)
+
+        rpp = dataframe_vacio()
+
+
+    # ========================================================
     # RESUMEN DE SCRAPERS
     # ========================================================
 
@@ -255,6 +323,14 @@ def main():
         f"Gestión:      {len(gestion)}"
     )
 
+    print(
+        f"Perú 21:      {len(peru21)}"
+    )
+
+    print(
+        f"RPP:          {len(rpp)}"
+    )
+
 
     # ========================================================
     # UNIR NOTICIAS
@@ -269,7 +345,9 @@ def main():
         [
             andina,
             elcomercio,
-            gestion
+            gestion,
+            peru21,
+            rpp
         ],
         ignore_index=True
     )
@@ -398,7 +476,9 @@ def main():
     for diario in [
         "Andina",
         "El Comercio",
-        "Gestión"
+        "Gestión",
+        "Perú 21",
+        "RPP"
     ]:
 
         cantidad = resumen.get(
